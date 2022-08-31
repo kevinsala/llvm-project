@@ -51,18 +51,19 @@ uint32_t determineNumberOfThreads(int32_t NumThreadsClause) {
       NumThreadsClause != -1 ? NumThreadsClause : icv::NThreads;
   uint32_t NumThreads = mapping::getBlockSize();
 
-  if (NThreadsICV != 0 && NThreadsICV < NumThreads)
+  if (NThreadsICV != 0 && NThreadsICV < NumThreads) {
     NumThreads = NThreadsICV;
 
-  // SPMD mode allows any number of threads, for generic mode we round down to a
-  // multiple of WARPSIZE since it is legal to do so in OpenMP.
-  if (mapping::isSPMDMode())
-    return NumThreads;
+    // SPMD mode allows any number of threads, for generic mode we round down to a
+    // multiple of WARPSIZE since it is legal to do so in OpenMP.
+    if (mapping::isSPMDMode())
+      return NumThreads;
 
-  if (NumThreads < mapping::getWarpSize())
-    NumThreads = 1;
-  else
-    NumThreads = (NumThreads & ~((uint32_t)mapping::getWarpSize() - 1));
+    if (NumThreads < mapping::getWarpSize())
+      NumThreads = 1;
+    else
+      NumThreads = (NumThreads & ~((uint32_t)mapping::getWarpSize() - 1));
+  }
 
   return NumThreads;
 }

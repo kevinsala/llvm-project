@@ -10984,6 +10984,15 @@ struct AAPotentialValuesFloating : AAPotentialValuesImpl {
       if (!CmpInst::isEquality(Pred))
         return false;
 
+      if (isIdentifiedFunctionLocal(LHSV) && isIdentifiedFunctionLocal(RHSV) &&
+          LHSV != RHSV) {
+        Constant *NewV =
+            ConstantInt::get(Type::getInt1Ty(Ctx), !Cmp.isTrueWhenEqual());
+        addValue(A, getState(), *NewV, /* CtxI */ nullptr, II.S,
+                 getAnchorScope());
+        return true;
+      }
+
       bool LHSIsNull = isa<ConstantPointerNull>(LHSV);
       bool RHSIsNull = isa<ConstantPointerNull>(RHSV);
       if (!LHSIsNull && !RHSIsNull)

@@ -36,6 +36,7 @@
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
+#include "llvm/IR/IntrinsicsNVPTX.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/ValueHandle.h"
 #include "llvm/Support/Casting.h"
@@ -221,6 +222,17 @@ bool AA::isDynamicallyUnique(Attributor &A, const AbstractAttribute &QueryingAA,
   // TODO: See the AAInstanceInfo class comment.
   if (!ForAnalysisOnly)
     return false;
+#if 0
+    if (auto *C = dyn_cast<Constant>(&V)) {
+      return !C->isThreadDependent();
+    }
+    if (auto *CB = dyn_cast<CallBase>(&V)) {
+      if (CB->arg_size() == 0 && !CB->mayHaveSideEffects() &&
+          !CB->mayReadFromMemory()) {
+        return true;
+      }
+    }
+#endif
   auto *InstanceInfoAA = A.getAAFor<AAInstanceInfo>(
       QueryingAA, IRPosition::value(V), DepClassTy::OPTIONAL);
   return InstanceInfoAA && InstanceInfoAA->isAssumedUniqueForAnalysis();
@@ -336,6 +348,9 @@ AA::combineOptionalValuesInAAValueLatice(const std::optional<Value *> &A,
     return Ty ? getWithType(**B, *Ty) : nullptr;
   if (*A == nullptr)
     return nullptr;
+  if ((isa<IntrinsicInst>(*A) && cast<IntrinsicInst>(*A)->getIntrinsicID() == Intrinsic::nvvm_read_ptx_sreg_ntid_x) &&
+    (isa<IntrinsicInst>(*B) && cast<IntrinsicInst>(*B)->getIntrinsicID() == Intrinsic::nvvm_read_ptx_sreg_ntid_x))
+    return A;
   if (!Ty)
     Ty = (*A)->getType();
   if (isa_and_nonnull<UndefValue>(*A))
@@ -2157,6 +2172,7 @@ void Attributor::runTillFixpoint() {
 
     AbstractState &State = ChangedAA->getState();
     if (!State.isAtFixpoint()) {
+      errs() << "Not FIX " << *ChangedAA << "\n";
       State.indicatePessimisticFixpoint();
 
       NumAttributesTimedOut++;
