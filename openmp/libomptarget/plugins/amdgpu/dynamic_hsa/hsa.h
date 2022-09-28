@@ -63,6 +63,7 @@ typedef enum {
 typedef enum {
   HSA_AGENT_INFO_NAME = 0,
   HSA_AGENT_INFO_VENDOR_NAME = 1,
+  HSA_AGENT_INFO_FEATURE = 2,
   HSA_AGENT_INFO_PROFILE = 4,
   HSA_AGENT_INFO_WAVEFRONT_SIZE = 6,
   HSA_AGENT_INFO_WORKGROUP_MAX_DIM = 7,
@@ -149,6 +150,11 @@ typedef enum {
   HSA_QUEUE_TYPE_MULTI = 0,
   HSA_QUEUE_TYPE_SINGLE = 1,
 } hsa_queue_type_t;
+
+typedef enum {
+  HSA_QUEUE_FEATURE_KERNEL_DISPATCH = 1,
+  HSA_QUEUE_FEATURE_AGENT_DISPATCH = 2
+} hsa_queue_feature_t;
 
 typedef uint32_t hsa_queue_type32_t;
 
