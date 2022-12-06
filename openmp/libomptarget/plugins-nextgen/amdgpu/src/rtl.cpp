@@ -2318,8 +2318,33 @@ private:
   /// Event handler that will be called by ROCr if an event is detected.
   static hsa_status_t eventHandler(const hsa_amd_event_t *Event, void *) {
     if (Event->event_type == HSA_AMD_GPU_MEMORY_FAULT_EVENT) {
+      std::string Reasons;
+      uint32_t ReasonsMask = Event->memory_fault.fault_reason_mask;
+      if (ReasonsMask & HSA_AMD_MEMORY_FAULT_PAGE_NOT_PRESENT)
+        Reasons += "HSA_AMD_MEMORY_FAULT_PAGE_NOT_PRESENT\n";
+      if (ReasonsMask & HSA_AMD_MEMORY_FAULT_READ_ONLY)
+        Reasons += " HSA_AMD_MEMORY_FAULT_READ_ONLY\n";
+      if (ReasonsMask & HSA_AMD_MEMORY_FAULT_NX)
+        Reasons += " HSA_AMD_MEMORY_FAULT_NX\n";
+      if (ReasonsMask & HSA_AMD_MEMORY_FAULT_HOST_ONLY)
+        Reasons += " HSA_AMD_MEMORY_FAULT_HOST_ONLY\n";
+      if (ReasonsMask & HSA_AMD_MEMORY_FAULT_DRAMECC)
+        Reasons += " HSA_AMD_MEMORY_FAULT_DRAMECC\n";
+      if (ReasonsMask & HSA_AMD_MEMORY_FAULT_IMPRECISE)
+        Reasons += " HSA_AMD_MEMORY_FAULT_IMPRECISE\n";
+      if (ReasonsMask & HSA_AMD_MEMORY_FAULT_SRAMECC)
+        Reasons += " HSA_AMD_MEMORY_FAULT_SRAMECC\n";
+      if (ReasonsMask & HSA_AMD_MEMORY_FAULT_HANG)
+        Reasons += " HSA_AMD_MEMORY_FAULT_HANG\n";
+
       // Abort the execution since we do not recover from this error.
-      FATAL_MESSAGE0(1, "Received HSA_AMD_GPU_MEMORY_FAULT_EVENT");
+      FATAL_MESSAGE(1,
+                    "Found HSA_AMD_GPU_MEMORY_FAULT_EVENT in agent %" PRIu64
+                    " at virtual address %p and reasons:\n %s",
+                    Event->memory_fault.agent,
+                    (void *)Event->memory_fault.virtual_address,
+                    Reasons.data());
+
       return HSA_STATUS_ERROR;
     }
     return HSA_STATUS_SUCCESS;
