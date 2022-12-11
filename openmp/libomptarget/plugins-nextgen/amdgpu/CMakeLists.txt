@@ -72,6 +72,7 @@ add_llvm_library(omptarget.rtl.amdgpu.nextgen SHARED
 
   ADDITIONAL_HEADER_DIRS
   ${LIBOMPTARGET_INCLUDE_DIR}
+  ${CMAKE_CURRENT_SOURCE_DIR}/utils
 
   LINK_COMPONENTS
   Support
@@ -95,6 +96,7 @@ target_include_directories(
   omptarget.rtl.amdgpu.nextgen
   PRIVATE
   ${LIBOMPTARGET_INCLUDE_DIR}
+  ${CMAKE_CURRENT_SOURCE_DIR}/utils
 )
 
 
