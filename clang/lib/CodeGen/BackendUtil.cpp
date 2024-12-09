@@ -77,6 +77,7 @@
 #include "llvm/Transforms/Instrumentation/SanitizerBinaryMetadata.h"
 #include "llvm/Transforms/Instrumentation/SanitizerCoverage.h"
 #include "llvm/Transforms/Instrumentation/ThreadSanitizer.h"
+#include "llvm/Transforms/Instrumentation/LightSanitizer.h"
 #include "llvm/Transforms/ObjCARC.h"
 #include "llvm/Transforms/Scalar/EarlyCSE.h"
 #include "llvm/Transforms/Scalar/GVN.h"
@@ -755,6 +756,10 @@ static void addSanitizers(const Triple &TargetTriple,
     };
     ASanPass(SanitizerKind::Address, false);
     ASanPass(SanitizerKind::KernelAddress, true);
+
+    if (CodeGenOpts.LightSanitizer) {
+      MPM.addPass(LightSanitizerPass());
+    }
 
     auto HWASanPass = [&](SanitizerMask Mask, bool CompileKernel) {
       if (LangOpts.Sanitize.has(Mask)) {

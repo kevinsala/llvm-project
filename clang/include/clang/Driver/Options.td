@@ -4131,7 +4131,12 @@ def ffinite_loops: Flag<["-"],  "ffinite-loops">, Group<f_Group>,
 def fno_finite_loops: Flag<["-"], "fno-finite-loops">, Group<f_Group>,
   HelpText<"Do not assume that any loop is finite.">,
   Visibility<[ClangOption, CC1Option]>;
-
+def flight_sanitizer : Flag<["-"], "flight-sanitizer">, Group<f_Group>,
+  HelpText<"Enable sanitizing the program using the LightSanitizer">,
+  Visibility<[CC1Option]>;
+def fno_light_sanitizer : Flag<["-"], "fno-light-sanitizer">, Group<f_Group>,
+  HelpText<"Disable sanitizing the program using the LightSanitizer">,
+  Visibility<[CC1Option]>;
 def ftrigraphs : Flag<["-"], "ftrigraphs">, Group<f_Group>,
   HelpText<"Process trigraph sequences">, Visibility<[ClangOption, CC1Option]>;
 def fno_trigraphs : Flag<["-"], "fno-trigraphs">, Group<f_Group>,

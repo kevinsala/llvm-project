@@ -2255,6 +2255,11 @@ bool CompilerInvocation::ParseCodeGenArgs(CodeGenOptions &Opts, ArgList &Args,
   else if (Args.hasArg(options::OPT_fno_finite_loops))
     Opts.FiniteLoops = CodeGenOptions::FiniteLoopsKind::Never;
 
+  if (Args.hasArg(options::OPT_flight_sanitizer))
+    Opts.LightSanitizer = 1;
+  else if (Args.hasArg(options::OPT_fno_light_sanitizer))
+    Opts.LightSanitizer = 0;
+
   Opts.EmitIEEENaNCompliantInsts = Args.hasFlag(
       options::OPT_mamdgpu_ieee, options::OPT_mno_amdgpu_ieee, true);
   if (!Opts.EmitIEEENaNCompliantInsts && !LangOptsRef.NoHonorNaNs)
