@@ -77,17 +77,8 @@ static bool canInstrumentGlobal(const GlobalVariable &G) {
                 [](const Use &U) { return isa<Instruction>(U.getUser()); });
 }
 
-static Twine getShadowGlobalName(const GlobalValue &G, uint32_t AS) {
-  switch (AS) {
-  case GlobalAS:
-    return ShadowGlobalPrefix + G.getName();
-  case SharedAS:
-    return ShadowSharedPrefix + G.getName();
-  case ConstantAS:
-    return ShadowConstantPrefix + G.getName();
-  default:
-    llvm_unreachable("not handled");
-  };
+static Twine getShadowGlobalName(const GlobalValue &G) {
+  return ShadowGlobalPrefix + G.getName();
 }
 
 namespace llvm {
@@ -329,14 +320,16 @@ private:
   BumpPtrAllocator BPA;
   StringSaver SS = StringSaver(BPA);
 
-#if 0
   bool handleAmbiguousCalls();
+#if 0
   bool handleCallStackSupport();
   bool finalizeKernels();
+#endif
 
   bool addCtor();
   bool addDtor();
 
+#if 0
   Function *createSanitizerInitKernel();
 #endif
 
@@ -389,7 +382,6 @@ private:
   void instrumentUnreachableInsts(
       SmallVectorImpl<UnreachableInst *> &UnreachableInsts);
 
-#if 0
   void instrumentGlobal(IRBuilder<NoFolder> &IRB, GlobalVariable &GV,
                         uint32_t AS);
   void instrumentCallInsts(SmallVectorImpl<CallInst *> &CallInsts);
@@ -398,7 +390,6 @@ private:
   void instrumentAccesses(DominatorTree &DT, PostDominatorTree &PDT,
                           SmallVectorImpl<AccessInfoTy> &Accesses);
   void instrumentAllocaInstructions(SmallVectorImpl<AllocaInst *> &AllocaInsts);
-#endif
 
   FunctionCallee getOrCreateFn(FunctionCallee &FC, StringRef Name, Type *RetTy,
                                ArrayRef<Type *> ArgTys) {
@@ -703,6 +694,7 @@ void LightSanitizerImpl::removeAS(Function &Fn,
     for (unsigned I = 0, E = PHI->getNumIncomingValues(); I < E; ++I)
       PHI->setIncomingValue(I, GetAsGeneric(*PHI->getIncomingValue(I)));
 }
+#endif
 
 void LightSanitizerImpl::instrumentCallInsts(
     SmallVectorImpl<CallInst *> &CallInsts) {
@@ -716,6 +708,8 @@ void LightSanitizerImpl::instrumentCallInsts(
       Value *Op = CI->getArgOperand(I);
       if (!Op->getType()->isPointerTy())
         continue;
+      //errs() << "inserting unpack call for callarg:\n";
+      //Op->dump();
       auto *PlainOp = Op;
       auto AS = Op->getType()->getPointerAddressSpace();
       if (AS)
@@ -725,6 +719,7 @@ void LightSanitizerImpl::instrumentCallInsts(
                             {getPC(IRB), getSourceIndex(*CI),
                              IRB.CreateAddrSpaceCast(PlainOp, PtrTy)},
                             Op->getName() + ".unpack");
+      //CB->dump();
       CI->setArgOperand(I, CB);
     }
   }
@@ -735,7 +730,6 @@ void LightSanitizerImpl::instrumentLifetimeIntrinsics(
   for (auto *LI : LifetimeInsts)
     LI->eraseFromParent();
 }
-#endif
 
 void LightSanitizerImpl::instrumentTrapInsts(
     SmallVectorImpl<IntrinsicInst *> &TrapInsts) {
@@ -758,7 +752,6 @@ void LightSanitizerImpl::instrumentUnreachableInsts(
   }
 }
 
-#if 0
 void LightSanitizerImpl::instrumentAccesses(
     DominatorTree &DT, PostDominatorTree &PDT,
     SmallVectorImpl<AccessInfoTy> &AccessInfos) {
@@ -861,6 +854,7 @@ void LightSanitizerImpl::instrumentAccesses(
       if (APInt(OffsetAndSize.getBitWidth(),
                 DL.getTypeStoreSize(AllocI->getAllocatedType()))
               .uge(OffsetAndSize)) {
+		// if store type size >= offset+storesize
         SafePtr = AllocI;
       }
     }
@@ -1038,7 +1032,6 @@ void LightSanitizerImpl::instrumentAllocaInstructions(
     }
   }
 }
-#endif
 
 bool LightSanitizerImpl::instrumentFunction(Function &Fn) {
   if (!shouldInstrumentFunction(&Fn))
@@ -1053,14 +1046,12 @@ bool LightSanitizerImpl::instrumentFunction(Function &Fn) {
 
   SmallVector<UnreachableInst *> UnreachableInsts;
   SmallVector<IntrinsicInst *> TrapCalls;
-#if 0
   SmallVector<AllocaInst *> AllocaInsts;
   SmallVector<AccessInfoTy> AccessInfos;
   SmallVector<Instruction *> ASInsts;
   SmallVector<LifetimeIntrinsic *> LifetimeInsts;
   SmallVector<CallInst *> CallInsts;
   SmallVector<AddrSpaceCastInst *> ASCInsts;
-#endif
 
   ReversePostOrderTraversal<Function *> RPOT(&Fn);
   for (auto &It : RPOT) {
@@ -1072,13 +1063,6 @@ bool LightSanitizerImpl::instrumentFunction(Function &Fn) {
       case Instruction::Unreachable:
         UnreachableInsts.push_back(cast<UnreachableInst>(&I));
         break;
-      case Instruction::Call:
-        if (auto *II = dyn_cast<IntrinsicInst>(&I)) {
-          if (II->getIntrinsicID() == Intrinsic::trap)
-            TrapCalls.push_back(II);
-        }
-        break;
-#if 0
       case Instruction::Alloca:
         AllocaInsts.push_back(cast<AllocaInst>(&I));
         break;
@@ -1168,22 +1152,20 @@ bool LightSanitizerImpl::instrumentFunction(Function &Fn) {
                         [&](Value *Op) { return isASType(*Op->getType()); }))
           ASInsts.push_back(&I);
         break;
-#endif
       }
     }
   }
 
-#if 0
   DominatorTree DT(Fn);
   PostDominatorTree PDT(Fn);
 
+#if 0
   removeAS(Fn, ASInsts);
+#endif
   instrumentCallInsts(CallInsts);
   instrumentLifetimeIntrinsics(LifetimeInsts);
-#endif
   instrumentTrapInsts(TrapCalls);
   instrumentUnreachableInsts(UnreachableInsts);
-#if 0
   instrumentAccesses(DT, PDT, AccessInfos);
   instrumentAllocaInstructions(AllocaInsts);
 
@@ -1196,12 +1178,10 @@ bool LightSanitizerImpl::instrumentFunction(Function &Fn) {
       Allocas.push_back(AI);
   for (auto *AI : Allocas)
     AI->moveBefore(&*BB.getFirstInsertionPt());
-#endif
 
   return true;
 }
 
-#if 0
 bool LightSanitizerImpl::handleAmbiguousCalls() {
   if (AmbiguousCalls.empty())
     return false;
@@ -1257,6 +1237,7 @@ bool LightSanitizerImpl::handleAmbiguousCalls() {
   return true;
 }
 
+#if 0
 bool LightSanitizerImpl::handleCallStackSupport() {
   if (LocationMap.empty())
     return false;
@@ -1278,6 +1259,7 @@ bool LightSanitizerImpl::handleCallStackSupport() {
 
   return true;
 }
+#endif
 
 void LightSanitizerImpl::instrumentGlobal(IRBuilder<NoFolder> &IRB,
                                             GlobalVariable &GV, uint32_t AS) {
@@ -1291,21 +1273,19 @@ void LightSanitizerImpl::instrumentGlobal(IRBuilder<NoFolder> &IRB,
     if (auto *PHI = dyn_cast<PHINode>(UserI))
       IP = PHI->getIncomingBlock(U)->getTerminator();
 
-    //UserI->getParent()->dump();
     SmallVector<Instruction *> CloneInsts;
     for (auto *NewI : NewInsts) {
       auto *CloneI = NewI->clone();
       CloneInsts.push_back(CloneI);
       CloneI->insertBefore(IP);
       CloneI->setName("i");
-      //errs() << "CloneI " << *CloneI << "\n";
       VMap[VMap[NewI]] = CloneI;
       RemapInstruction(CloneI, VMap, RF_IgnoreMissingLocals);
     }
     U.set(VMap[VMap[NewInsts.back()]]);
-    //UserI->getParent()->dump();
+#if 0
     removeAS(*IP->getFunction(), CloneInsts);
-    //UserI->getParent()->dump();
+#endif
     if (isa<AddrSpaceCastInst>(NewInsts.front()))
       return nullptr;
     return cast<Instruction>(VMap[VMap[NewInsts.front()]]);
@@ -1348,8 +1328,6 @@ void LightSanitizerImpl::instrumentGlobal(IRBuilder<NoFolder> &IRB,
           continue;
         }
 
-        //U.get()->dump();
-        //U.getUser()->dump();
         llvm_unreachable("unhandled user");
       }
     }
@@ -1357,33 +1335,37 @@ void LightSanitizerImpl::instrumentGlobal(IRBuilder<NoFolder> &IRB,
       NewInst->deleteValue();
   };
 
+  //errs() << "processing global variable \n";
+  //GV.dump();
+
   auto *ShadowGV = new GlobalVariable(
       M, PtrTy, false, GlobalValue::PrivateLinkage, PoisonValue::get(PtrTy),
-      getShadowGlobalName(GV, AS), &GV, GlobalValue::NotThreadLocal, AS);
+      getShadowGlobalName(GV), &GV, GlobalValue::NotThreadLocal, 0);
 
   auto *Size =
       ConstantInt::get(Int64Ty, DL.getTypeAllocSize(GV.getValueType()));
 
-  auto *FakePtr = createCall(IRB, getGlobalRegisterFn(AS),
+  auto *FakePtr = createCall(IRB, getGlobalRegisterFn(0),
                              {getPC(IRB), getSourceIndex(&GV), &GV, Size});
   IRB.CreateStore(FakePtr, ShadowGV);
+
+  //errs() << "processing its uses\n";
 
   SmallVector<Use *> ToBeReplacedUses;
   for (auto &U : GV.uses()) {
     if (auto *UserI = dyn_cast<Instruction>(U.getUser())) {
+      //UserI->dump();
       if (shouldInstrumentFunction(UserI->getFunction()))
         ToBeReplacedUses.push_back(&U);
     } else if (auto *CE = dyn_cast<ConstantExpr>(U.getUser())) {
       ConstantExprToInst(&U, CE, ToBeReplacedUses);
     } else {
-      //U.get()->dump();
-      //U.getUser()->dump();
+      //errs() << "unhandled user of global variable\n";
       llvm_unreachable("unhandled user");
     }
   }
 
   for (auto *U : ToBeReplacedUses) {
-
     auto *IP = cast<Instruction>(U->getUser());
     if (IP->hasMetadata(LLVMContext::MD_annotation)) {
       if (any_of(IP->getMetadata(LLVMContext::MD_annotation)->operands(),
@@ -1394,7 +1376,6 @@ void LightSanitizerImpl::instrumentGlobal(IRBuilder<NoFolder> &IRB,
                            : cast<MDString>(
                                  cast<MDTuple>(Op.get())->getOperand(0).get())
                                  ->getString();
-                   //errs() << "ANNOTATION " << AnnotationStr << "\n";
                    return (AnnotationStr == "__san_disable");
                  }))
         continue;
@@ -1422,6 +1403,7 @@ void LightSanitizerImpl::instrumentGlobal(IRBuilder<NoFolder> &IRB,
   }
 }
 
+#if 0
 Function *LightSanitizerImpl::createSanitizerInitKernel() {
   if (auto *Fn = M.getFunction("__lightsan_init_kernel"))
     return Fn;
@@ -1471,6 +1453,7 @@ bool LightSanitizerImpl::finalizeKernels() {
   }
   return Kernels.size();
 }
+#endif
 
 bool LightSanitizerImpl::addCtor() {
   Function *CtorFn =
@@ -1481,12 +1464,8 @@ bool LightSanitizerImpl::addCtor() {
   BasicBlock *Entry = BasicBlock::Create(Ctx, "entry", CtorFn);
   IRBuilder<NoFolder> IRB(Entry);
 
-  for (auto &GV : M.globals()) {
-    if (GV.getAddressSpace() != GlobalAS)
-      continue;
-
+  for (auto &GV : M.globals())
     instrumentGlobal(IRB, GV, GlobalAS);
-  }
 
   IRB.CreateRetVoid();
 
@@ -1508,29 +1487,28 @@ bool LightSanitizerImpl::addDtor() {
   appendToGlobalDtors(M, DtorFn, 0, nullptr);
   return true;
 }
-#endif
 
 bool LightSanitizerImpl::instrument() {
   bool Changed = false;
 
-  //for (auto &GV : M.globals())
-  //  convertUsersOfConstantsToInstructions({&GV});
+  for (auto &GV : M.globals())
+    convertUsersOfConstantsToInstructions({&GV});
 
   for (Function &Fn : M)
     Changed |= instrumentFunction(Fn);
 
-  //handleAmbiguousCalls();
+  handleAmbiguousCalls();
 
-  //Changed |= addCtor();
-  //Changed |= addDtor();
+  Changed |= addCtor();
+  Changed |= addDtor();
   //Changed |= finalizeKernels();
   //Changed |= handleCallStackSupport();
 
-  //removeFromUsedLists(M, [&](Constant *C) {
-  //  if (!C->getName().starts_with("__lightsan_"))
-  //    return false;
-  //  return Changed = true;
-  //});
+  removeFromUsedLists(M, [&](Constant *C) {
+    if (!C->getName().starts_with("__lightsan_"))
+      return false;
+    return Changed = true;
+  });
 
   return Changed;
 }
@@ -1538,6 +1516,10 @@ bool LightSanitizerImpl::instrument() {
 PreservedAnalyses LightSanitizerPass::run(Module &M,
                                             ModuleAnalysisManager &AM) {
   errs() << "[LightSan] starting pass\n";
+
+  //errs() << "printing module before pass\n";
+  //M.dump();
+
   FunctionAnalysisManager &FAM =
       AM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
   LightSanitizerImpl Impl(M, FAM);
