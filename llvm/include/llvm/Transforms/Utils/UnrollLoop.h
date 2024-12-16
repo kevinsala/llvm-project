@@ -36,6 +36,7 @@ class OptimizationRemarkEmitter;
 class ScalarEvolution;
 class StringRef;
 class Value;
+class UnrollAdvice;
 
 using NewLoopsMap = SmallDenseMap<const Loop *, Loop *, 4>;
 
@@ -47,6 +48,12 @@ const char *const LLVMLoopUnrollFollowupUnrolled =
 const char *const LLVMLoopUnrollFollowupRemainder =
     "llvm.loop.unroll.followup_remainder";
 /// @}
+
+/// A magic value for use with the Threshold parameter to indicate
+/// that the loop unroll should be performed regardless of how much
+/// code expansion would result.
+static const unsigned LoopUnrollNoThreshold =
+    std::numeric_limits<unsigned>::max();
 
 const Loop* addClonedBlockToLoopInfo(BasicBlock *OriginalBB,
                                      BasicBlock *ClonedBB, LoopInfo *LI,
@@ -161,7 +168,7 @@ bool computeUnrollCount(Loop *L, const TargetTransformInfo &TTI,
                         unsigned TripMultiple, const UnrollCostEstimator &UCE,
                         TargetTransformInfo::UnrollingPreferences &UP,
                         TargetTransformInfo::PeelingPreferences &PP,
-                        bool &UseUpperBound);
+                        bool &UseUpperBound, UnrollAdvice &Advice);
 
 } // end namespace llvm
 
