@@ -62,6 +62,7 @@ static constexpr StringRef ShadowSharedPrefix = "__lightsan_shared.";
 static constexpr StringRef ShadowConstantPrefix = "__lightsan_constant.";
 static constexpr StringRef GlobalIgnorePrefix[] = {"llvm."};
 static constexpr StringRef GlobalIgnoreParts[] = {"__lightsan_", "__san"};
+static constexpr StringRef SafeAnnotation = "__lightsan_safe";
 
 static bool canInstrumentGlobal(const GlobalVariable &G) {
   auto Name = G.getName();
@@ -377,7 +378,7 @@ private:
   void removeAS(Function &Fn, SmallVectorImpl<Instruction *> &ASInsts);
 #endif
 
-  bool instrumentFunction(Function &Fn);
+  bool instrumentFunction(Function &Fn, SmallVectorImpl<CallInst *> &CallInsts);
   void instrumentTrapInsts(SmallVectorImpl<IntrinsicInst *> &TrapInsts);
   void instrumentUnreachableInsts(
       SmallVectorImpl<UnreachableInst *> &UnreachableInsts);
@@ -390,6 +391,33 @@ private:
   void instrumentAccesses(DominatorTree &DT, PostDominatorTree &PDT,
                           SmallVectorImpl<AccessInfoTy> &Accesses);
   void instrumentAllocaInstructions(SmallVectorImpl<AllocaInst *> &AllocaInsts);
+
+  bool hasSafeAnnotation(Instruction *I) {
+    if (!I->hasMetadata(LLVMContext::MD_annotation))
+      return false;
+
+    return any_of(I->getMetadata(LLVMContext::MD_annotation)->operands(),
+                 [&](const MDOperand &Op) {
+                   StringRef AnnotationStr =
+                       isa<MDString>(Op.get())
+                           ? cast<MDString>(Op.get())->getString()
+                           : cast<MDString>(
+                                 cast<MDTuple>(Op.get())->getOperand(0).get())
+                                 ->getString();
+                   return (AnnotationStr == SafeAnnotation);
+                 });
+  }
+
+  bool isSafeCallArg(Value *Op) {
+    if (!Op->getType()->isPointerTy())
+      return true;
+    if (Op == ConstantPointerNull::get(PtrTy))
+      return true;
+    if (auto *LI = dyn_cast<LoadInst>(Op))
+      if (auto *GEP = dyn_cast<GetElementPtrInst>(LI->getPointerOperand()))
+        return hasSafeAnnotation(GEP);
+    return false;
+  }
 
   FunctionCallee getOrCreateFn(FunctionCallee &FC, StringRef Name, Type *RetTy,
                                ArrayRef<Type *> ArgTys) {
@@ -534,8 +562,8 @@ private:
       PointerType::get(Ctx, 0), PointerType::get(Ctx, 1),
       PointerType::get(Ctx, 2), PointerType::get(Ctx, 3),
       PointerType::get(Ctx, 4), PointerType::get(Ctx, 5)};
-  Type *AllocationInfoTy = StructType::get(Ctx, {Int32Ty, Int32Ty}, true);
-  Type *InfoTy = StructType::get(Ctx, {AllocationInfoTy, Int32Ty}, true);
+  Type *AllocationInfoTy = StructType::create(Ctx, {Int32Ty, Int32Ty}, "PtrInfoTy", true);
+  Type *InfoTy = StructType::create(Ctx, {AllocationInfoTy, Int32Ty}, "PtrASInfoTy", true);
 };
 
 } // end anonymous namespace
@@ -706,10 +734,9 @@ void LightSanitizerImpl::instrumentCallInsts(
     IRBuilder<NoFolder> IRB(CI);
     for (int I = 0, E = CI->arg_size(); I != E; ++I) {
       Value *Op = CI->getArgOperand(I);
-      if (!Op->getType()->isPointerTy())
+      if (isSafeCallArg(Op))
         continue;
-      //errs() << "inserting unpack call for callarg:\n";
-      //Op->dump();
+
       auto *PlainOp = Op;
       auto AS = Op->getType()->getPointerAddressSpace();
       if (AS)
@@ -862,7 +889,7 @@ void LightSanitizerImpl::instrumentAccesses(
       IRBuilder<NoFolder> IRB(AI.I);
       auto *Ptr = cast<Instruction>(IRB.CreateGEP(
           Int8Ty, SafePtr, {ConstantInt::get(Int32Ty, Offset.getSExtValue())}));
-      Ptr->addAnnotationMetadata("__san_disable");
+      Ptr->addAnnotationMetadata(SafeAnnotation);
       Value *ASPtr = IRB.CreateAddrSpaceCast(
           Ptr, AI.I->getOperand(AI.PtrOpIdx)->getType());
       AI.I->setOperand(AI.PtrOpIdx, ASPtr);
@@ -1004,20 +1031,8 @@ void LightSanitizerImpl::instrumentAllocaInstructions(
       if (UI == FakePtr)
         continue;
 
-      if (UI->hasMetadata(LLVMContext::MD_annotation)) {
-        if (any_of(UI->getMetadata(LLVMContext::MD_annotation)->operands(),
-                   [&](const MDOperand &Op) {
-                     StringRef AnnotationStr =
-                         isa<MDString>(Op.get())
-                             ? cast<MDString>(Op.get())->getString()
-                             : cast<MDString>(
-                                   cast<MDTuple>(Op.get())->getOperand(0).get())
-                                   ->getString();
-                     //errs() << "ANNOTATION " << AnnotationStr << "\n";
-                     return (AnnotationStr == "__san_disable");
-                   }))
+      if (hasSafeAnnotation(UI))
           continue;
-      }
 
       //if (!isa<AddrSpaceCastInst>(UI)) {
       //  AI->getFunction()->dump();
@@ -1033,7 +1048,7 @@ void LightSanitizerImpl::instrumentAllocaInstructions(
   }
 }
 
-bool LightSanitizerImpl::instrumentFunction(Function &Fn) {
+bool LightSanitizerImpl::instrumentFunction(Function &Fn, SmallVectorImpl<CallInst *> &CallInsts) {
   if (!shouldInstrumentFunction(&Fn))
     return false;
 
@@ -1050,7 +1065,6 @@ bool LightSanitizerImpl::instrumentFunction(Function &Fn) {
   SmallVector<AccessInfoTy> AccessInfos;
   SmallVector<Instruction *> ASInsts;
   SmallVector<LifetimeIntrinsic *> LifetimeInsts;
-  SmallVector<CallInst *> CallInsts;
   SmallVector<AddrSpaceCastInst *> ASCInsts;
 
   ReversePostOrderTraversal<Function *> RPOT(&Fn);
@@ -1162,7 +1176,6 @@ bool LightSanitizerImpl::instrumentFunction(Function &Fn) {
 #if 0
   removeAS(Fn, ASInsts);
 #endif
-  instrumentCallInsts(CallInsts);
   instrumentLifetimeIntrinsics(LifetimeInsts);
   instrumentTrapInsts(TrapCalls);
   instrumentUnreachableInsts(UnreachableInsts);
@@ -1367,19 +1380,8 @@ void LightSanitizerImpl::instrumentGlobal(IRBuilder<NoFolder> &IRB,
 
   for (auto *U : ToBeReplacedUses) {
     auto *IP = cast<Instruction>(U->getUser());
-    if (IP->hasMetadata(LLVMContext::MD_annotation)) {
-      if (any_of(IP->getMetadata(LLVMContext::MD_annotation)->operands(),
-                 [&](const MDOperand &Op) {
-                   StringRef AnnotationStr =
-                       isa<MDString>(Op.get())
-                           ? cast<MDString>(Op.get())->getString()
-                           : cast<MDString>(
-                                 cast<MDTuple>(Op.get())->getOperand(0).get())
-                                 ->getString();
-                   return (AnnotationStr == "__san_disable");
-                 }))
-        continue;
-    }
+    if (hasSafeAnnotation(IP))
+      continue;
 
     if (auto *PHI = dyn_cast<PHINode>(IP))
       IP = PHI->getIncomingBlock(*U)->getTerminator();
@@ -1494,8 +1496,10 @@ bool LightSanitizerImpl::instrument() {
   for (auto &GV : M.globals())
     convertUsersOfConstantsToInstructions({&GV});
 
+  SmallVector<CallInst *> CallInsts;
+
   for (Function &Fn : M)
-    Changed |= instrumentFunction(Fn);
+    Changed |= instrumentFunction(Fn, CallInsts);
 
   handleAmbiguousCalls();
 
@@ -1503,6 +1507,9 @@ bool LightSanitizerImpl::instrument() {
   Changed |= addDtor();
   //Changed |= finalizeKernels();
   //Changed |= handleCallStackSupport();
+
+  // Instrument call instructions after accesses and globals
+  instrumentCallInsts(CallInsts);
 
   removeFromUsedLists(M, [&](Constant *C) {
     if (!C->getName().starts_with("__lightsan_"))
@@ -1517,8 +1524,9 @@ PreservedAnalyses LightSanitizerPass::run(Module &M,
                                             ModuleAnalysisManager &AM) {
   errs() << "[LightSan] starting pass\n";
 
-  //errs() << "printing module before pass\n";
-  //M.dump();
+  errs() << "=================================================\n";
+  errs() << "[LightSan] module before the pass:\n";
+  M.dump();
 
   FunctionAnalysisManager &FAM =
       AM.getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
