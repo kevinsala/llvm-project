@@ -163,6 +163,7 @@ private:
     Value *Start;
     Value *Length;
     Value *AS;
+    AllocaInst *Alloca;
   };
   DenseMap<Value *, PtrInfoTy> AllocationInfoMap;
   StringMap<Value *> GlobalStringMap;
@@ -338,7 +339,7 @@ private:
   Value *getFileName(IRBuilder<NoFolder> &IRB);
   Value *getLineNo(IRBuilder<NoFolder> &IRB);
 
-  PtrInfoTy getPtrInfoTy(Value &Obj, const AccessInfoTy &AI) {
+  PtrInfoTy getPtrInfoTy(Value &Obj, const AccessInfoTy &AI, Instruction &BaseIP) {
     if (AI.AS > 1)
       return {
           PoisonValue::get(InfoTy->getContainedType(0)->getContainedType(0)),
@@ -352,24 +353,34 @@ private:
       } else if (auto *I = dyn_cast<Instruction>(&Obj)) {
         IP = I->getNextNode();
       } else if (isa<Argument>(Obj)) {
+#if 0
         IP = &*cast<Argument>(Obj)
                    .getParent()
                    ->getEntryBlock()
                    .getFirstNonPHIOrDbgOrAlloca();
+#endif
+        IP = &BaseIP;
       } else {
+#if 0
         IP = &*AI.I->getFunction()
                    ->getEntryBlock()
                    .getFirstNonPHIOrDbgOrAlloca();
+#endif
+        IP = &BaseIP;
       }
+
       IRBuilder<NoFolder> IRB(IP);
-      auto *AllocationInfoStruct =
-          createCall(IRB, getGetAllocationInfoFn(AI.AS),
-                     {getPC(IRB), getSourceIndex(*AI.I),
-                      IRB.CreateAddrSpaceCast(&Obj, PtrTy)});
+      auto *AllocaStruct = IRB.CreateAlloca(InfoTy);
+      createCall(IRB, getGetAllocationInfoFn(AI.AS),
+                 {getPC(IRB), getSourceIndex(*AI.I),
+                 IRB.CreateAddrSpaceCast(&Obj, PtrTy),
+                 AllocaStruct});
+      auto *LoadStruct = IRB.CreateLoad(InfoTy, AllocaStruct);
       AllocationInfo = PtrInfoTy{
-          IRB.CreateExtractValue(AllocationInfoStruct, {0, 0}, "obj.base"),
-          IRB.CreateExtractValue(AllocationInfoStruct, {0, 1}, "obj.size"),
-          IRB.CreateExtractValue(AllocationInfoStruct, {1}, "obj.as")};
+          IRB.CreateExtractValue(LoadStruct, {0, 0}, "obj.base"),
+          IRB.CreateExtractValue(LoadStruct, {0, 1}, "obj.size"),
+          IRB.CreateExtractValue(LoadStruct, {1}, "obj.as"),
+          AllocaStruct};
     }
     return AllocationInfo;
   }
@@ -379,6 +390,7 @@ private:
 #endif
 
   bool instrumentFunction(Function &Fn, SmallVectorImpl<CallInst *> &CallInsts);
+  bool instrumentMainFunction();
   void instrumentTrapInsts(SmallVectorImpl<IntrinsicInst *> &TrapInsts);
   void instrumentUnreachableInsts(
       SmallVectorImpl<UnreachableInst *> &UnreachableInsts);
@@ -413,9 +425,11 @@ private:
       return true;
     if (Op == ConstantPointerNull::get(PtrTy))
       return true;
+    // Avoid sanitizing external global variables for the moment
     if (auto *LI = dyn_cast<LoadInst>(Op))
       if (auto *GEP = dyn_cast<GetElementPtrInst>(LI->getPointerOperand()))
-        return hasSafeAnnotation(GEP);
+        if (auto *GV = dyn_cast<GlobalVariable>(GEP->getPointerOperand()))
+          return GV->hasExternalLinkage();
     return false;
   }
 
@@ -475,7 +489,7 @@ private:
     assert(AS < NumSupportedAddressSpaces && "Unexpected address space!");
     return getOrCreateFn(GetAllocationInfoFn[AS],
                          "__lightsan_get_as" + std::to_string(AS) + "_info",
-                         InfoTy, {Int64Ty, Int64Ty, PtrTy});
+                         VoidTy, {Int64Ty, Int64Ty, PtrTy, PtrTy});
   }
 
   /// ptr(0) __lightsan_check_as0_access_with_info(/* PC */Int64Ty,
@@ -528,6 +542,15 @@ private:
         "__lightsan_register_as" + std::to_string(AS) + "_global", PtrTy,
         {/*PC*/ Int64Ty, /*LocationId*/ Int64Ty, ASPtrTy[AS], Int64Ty});
     return GlobalRegisterFn[AS];
+  }
+
+  FunctionCallee MainArgsRegisterFn;
+  FunctionCallee getMainArgsRegisterFn() {
+    getOrCreateFn(
+        MainArgsRegisterFn,
+        "__lightsan_register_main_args", PtrTy,
+        {/*PC*/ Int64Ty, /*LocationId*/ Int64Ty, Int32Ty, PtrTy});
+    return MainArgsRegisterFn;
   }
 
   CallInst *createCall(IRBuilder<NoFolder> &IRB, FunctionCallee Callee,
@@ -804,7 +827,9 @@ void LightSanitizerImpl::instrumentAccesses(
     //    if (AI.AS == 1)
     //      AI.AS = 0;
 
-    const auto &PtrInfo = getPtrInfoTy(*Obj, AI);
+    Instruction *BaseIP = IP->getParent()->getFirstNonPHIOrDbgOrLifetime();
+
+    const auto &PtrInfo = getPtrInfoTy(*Obj, AI, *BaseIP);
 
     if (auto *PtrI = dyn_cast<Instruction>(Ptr))
       if (DT.dominates(PtrI, IP) && PDT.dominates(IP, PtrI))
@@ -972,7 +997,9 @@ void LightSanitizerImpl::instrumentAccesses(
     //    if (AI.AS == 1)
     //      AI.AS = 0;
 
-    const auto &PtrInfo = getPtrInfoTy(*Obj, AI);
+    Instruction *BaseIP = AI.I->getParent()->getFirstNonPHIOrDbgOrLifetime();
+
+    const auto &PtrInfo = getPtrInfoTy(*Obj, AI, *BaseIP);
 
     auto *IP = AI.I;
     if (auto *PtrI = dyn_cast<Instruction>(FakePtr))
@@ -1184,13 +1211,46 @@ bool LightSanitizerImpl::instrumentFunction(Function &Fn, SmallVectorImpl<CallIn
 
   RTCalls.clear();
 
-  auto &BB = Fn.getEntryBlock();
+  auto &EntryBB = Fn.getEntryBlock();
   SmallVector<AllocaInst *> Allocas;
-  for (auto &I : BB)
-    if (auto *AI = dyn_cast<AllocaInst>(&I))
-      Allocas.push_back(AI);
+  for (auto &BB : Fn)
+    for (auto &I : BB)
+      if (auto *AI = dyn_cast<AllocaInst>(&I))
+        Allocas.push_back(AI);
   for (auto *AI : Allocas)
-    AI->moveBefore(&*BB.getFirstInsertionPt());
+    AI->moveBefore(&*EntryBB.getFirstInsertionPt());
+
+  return true;
+}
+
+bool LightSanitizerImpl::instrumentMainFunction()
+{
+  auto *OrigMainFn = M.getFunction("main");
+  if (!shouldInstrumentFunction(OrigMainFn))
+    return false;
+
+  OrigMainFn->setName("__ligthsan_main");
+
+  Function *NewMainFn = Function::Create(OrigMainFn->getFunctionType(), GlobalValue::ExternalLinkage, "main", M);
+  NewMainFn->addFnAttr(Attribute::DisableSanitizerInstrumentation);
+
+  auto *EntryBB = BasicBlock::Create(Ctx, "entry", NewMainFn);
+  IRBuilder<NoFolder> IRB(EntryBB, EntryBB->getFirstNonPHIOrDbgOrAlloca());
+
+  SmallVector<Value *> Args;
+  for (Argument &Arg : NewMainFn->args())
+    Args.push_back(&Arg);
+
+  if (Args.size() > 0) {
+    Args[1] = createCall(IRB, getMainArgsRegisterFn(),
+                               {getPC(IRB), ConstantInt::get(Int64Ty, 0), Args[0], Args[1]});
+  }
+
+  FunctionCallee FnCallee = M.getOrInsertFunction("__ligthsan_main", OrigMainFn->getFunctionType());
+
+  ArrayRef<Value *> ArrayRefArgs(Args);
+  auto *Ret = IRB.CreateCall(FnCallee, ArrayRefArgs);
+  IRB.CreateRet(Ret);
 
   return true;
 }
@@ -1510,6 +1570,8 @@ bool LightSanitizerImpl::instrument() {
 
   // Instrument call instructions after accesses and globals
   instrumentCallInsts(CallInsts);
+
+  Changed |= instrumentMainFunction();
 
   removeFromUsedLists(M, [&](Constant *C) {
     if (!C->getName().starts_with("__lightsan_"))
