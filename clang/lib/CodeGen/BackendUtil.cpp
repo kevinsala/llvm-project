@@ -67,6 +67,7 @@
 #include "llvm/Transforms/Instrumentation/GCOVProfiler.h"
 #include "llvm/Transforms/Instrumentation/HWAddressSanitizer.h"
 #include "llvm/Transforms/Instrumentation/InstrProfiling.h"
+#include "llvm/Transforms/Instrumentation/Instrumentor.h"
 #include "llvm/Transforms/Instrumentation/KCFI.h"
 #include "llvm/Transforms/Instrumentation/LowerAllowCheckPass.h"
 #include "llvm/Transforms/Instrumentation/MemProfiler.h"
@@ -1030,6 +1031,10 @@ void EmitAssemblyHelper::RunOptimizationPipeline(
             RealtimeSanitizerOptions Opts;
             FPM.addPass(RealtimeSanitizerPass(Opts));
           });
+
+    if (!IsThinLTOPostLink)
+      if (CodeGenOpts.Instrumentor)
+        MPM.addPass(InstrumentorPass());
 
     // Don't add sanitizers if we are here from ThinLTO PostLink. That already
     // done on PreLink stage.
