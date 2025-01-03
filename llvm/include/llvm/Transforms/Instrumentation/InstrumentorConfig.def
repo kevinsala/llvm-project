@@ -79,6 +79,9 @@ CONFIG(Store, bool, SyncScopeId, true)
 CONFIG(Store, bool, IsVolatile, true)
 ///}
 
+/// Should the pointer operand be replaced by the runtime call result.
+CONFIG(Store, bool, ReplacePointerOperand, true)
+
 /// Optional callback, see CallbackTy.
 CONFIG_INTERNAL(Store, CallbackTy, CB, nullptr)
 
@@ -89,11 +92,11 @@ SECTION_END(Store)
 ///{
 SECTION_START(Load, LoadInst)
 
-/// Should loads be instrumented.
-CONFIG(Load, bool, Instrument, true)
-
-/// Should loads also be instrumented before their execution.
+/// Should loads be instrumented before their execution.
 CONFIG(Load, bool, InstrumentBefore, true)
+
+/// Should loads be instrumented after their execution.
+CONFIG(Load, bool, InstrumentAfter, true)
 
 /// Selection of information passed to the runtime.
 ///{
@@ -116,6 +119,9 @@ CONFIG(Load, bool, SyncScopeId, true)
 /// The volatile flag.
 CONFIG(Load, bool, IsVolatile, true)
 ///}
+
+/// Should the pointer operand be replaced by the runtime call result.
+CONFIG(Load, bool, ReplacePointerOperand, true)
 
 /// Should the value be replaced by the runtime call result.
 CONFIG(Load, bool, ReplaceValue, true)
@@ -226,6 +232,59 @@ CONFIG_INTERNAL(Unreachable, CallbackTy, CB, nullptr)
 SECTION_END(Unreachable)
 ///}
 
+/// GlobalVariable
+///{
+SECTION_START(GlobalVariable, GlobalVariable)
+
+/// Should the global variables be instrumented.
+CONFIG(GlobalVariable, bool, Instrument, true)
+
+/// Selection of information passed to the runtime.
+///{
+/// The pointer to the global variable.
+CONFIG(GlobalVariable, bool, Value, true)
+/// The size of the global variable.
+CONFIG(GlobalVariable, bool, Size, true)
+/// The minimal alignment requested statically.
+CONFIG(GlobalVariable, bool, Alignment, true)
+/// Whether the global variable is constant.
+CONFIG(GlobalVariable, bool, Constant, true)
+/// The value of the unnamed address attribute.
+CONFIG(GlobalVariable, bool, UnnamedAddress, true)
+/// The name of the global variable.
+CONFIG(GlobalVariable, bool, Name, true)
+///}
+
+/// Should the value be replaced by the runtime call result.
+CONFIG(GlobalVariable, bool, ReplaceValue, true)
+
+/// Optional callback, see GlobalCallbackTy.
+CONFIG_INTERNAL(GlobalVariable, GlobalCallbackTy, CB, nullptr)
+
+SECTION_END(GlobalVariable)
+///}
+
+/// Module
+///{
+SECTION_START(Module, Module)
+
+/// Should the module construction be instrumented.
+CONFIG(Module, bool, InstrumentBefore, true)
+
+/// Should the module destruction be instrumented.
+CONFIG(Module, bool, InstrumentAfter, true)
+
+/// Selection of information passed to the runtime.
+///{
+/// The name of the module.
+CONFIG(Module, bool, Name, true)
+/// The target triple of the module.
+CONFIG(Module, bool, TargetTriple, true)
+///}
+
+SECTION_END(Module)
+///}
+
 /// MainFunction
 ///{
 SECTION_START(MainFunction, CallBase)
@@ -246,10 +305,22 @@ CONFIG(MainFunction, bool, Value, true)
 CONFIG(MainFunction, bool, ReplaceValue, true)
 ///}
 
-/// Optional callback, see CallbackTy.
-CONFIG_INTERNAL(MainFunction, CallbackTy, CB, nullptr)
+/// Optional callback, see GlobalCallbackTy.
+CONFIG_INTERNAL(MainFunction, GlobalCallbackTy, CB, nullptr)
 
 SECTION_END(MainFunction)
+///}
+
+/// FunctionCall
+///{
+SECTION_START(FunctionCall, CallBase)
+
+CONFIG(FunctionCall, bool, InstrumentArgs, true)
+
+CONFIG(FunctionCall, bool, Value, true)
+CONFIG(FunctionCall, bool, ReplaceValue, true)
+
+SECTION_END(FunctionCall)
 ///}
 
 #undef SECTION_START
