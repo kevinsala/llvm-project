@@ -77,10 +77,15 @@ CONFIG(Store, bool, AtomicityOrdering, true)
 CONFIG(Store, bool, SyncScopeId, true)
 /// The volatile flag.
 CONFIG(Store, bool, IsVolatile, true)
+/// The pointer base info. See BasePointer.
+CONFIG(Store, bool, BasePointerInfo, true)
 ///}
 
 /// Should the pointer operand be replaced by the runtime call result.
 CONFIG(Store, bool, ReplacePointerOperand, true)
+
+/// Skip instrumenting stores that are known to be safe at compile time.
+CONFIG(Store, bool, SkipSafeAccess, false)
 
 /// Optional callback, see CallbackTy.
 CONFIG_INTERNAL(Store, CallbackTy, CB, nullptr)
@@ -118,6 +123,8 @@ CONFIG(Load, bool, AtomicityOrdering, true)
 CONFIG(Load, bool, SyncScopeId, true)
 /// The volatile flag.
 CONFIG(Load, bool, IsVolatile, true)
+/// The pointer base info. See BasePointer.
+CONFIG(Load, bool, BasePointerInfo, true)
 ///}
 
 /// Should the pointer operand be replaced by the runtime call result.
@@ -125,6 +132,9 @@ CONFIG(Load, bool, ReplacePointerOperand, true)
 
 /// Should the value be replaced by the runtime call result.
 CONFIG(Load, bool, ReplaceValue, true)
+
+/// Skip instrumenting loads that are known to be safe at compile time.
+CONFIG(Store, bool, SkipSafeAccess, false)
 
 /// Optional callback, see CallbackTy.
 CONFIG_INTERNAL(Load, CallbackTy, CB, nullptr)
@@ -321,6 +331,30 @@ CONFIG(FunctionCall, bool, Value, true)
 CONFIG(FunctionCall, bool, ReplaceValue, true)
 
 SECTION_END(FunctionCall)
+///}
+
+/// BasePointer
+///{
+SECTION_START(BasePointer, Value)
+
+/// Should the base pointers (originators) be instrumented.
+CONFIG(BasePointer, bool, Instrument, true)
+
+/// Selection of information passed to the runtime.
+///{
+/// The base pointer.
+CONFIG(BasePointer, bool, Value, true)
+/// Should the runtime call return pointer information as a 64-bit integer. This
+/// info can be forwarded to load and store instrumentation. See BasePointerInfo
+/// option for Load and Store.
+CONFIG(BasePointer, bool, ReturnPointerInfo, true)
+///}
+
+/// Skip instrumenting base pointers whose PointerInfo are not used by any Load
+/// or Store.
+CONFIG(BasePointer, bool, SkipUnused, true)
+
+SECTION_END(BasePointer)
 ///}
 
 #undef SECTION_START
