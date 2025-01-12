@@ -16,6 +16,7 @@
 #include "llvm/Analysis/MemoryBuiltins.h"
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
+#include "llvm/Analysis/ValueTracking.h"
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/IR/CFG.h"
 #include "llvm/IR/Constant.h"
@@ -520,6 +521,10 @@ bool InstrumentorImpl::instrumentAlloca(AllocaInst &I) {
                !hasAnnotation(cast<Instruction>(U.getUser()), COAnnotation);
       return true;
     });
+
+    // This generates a base pointer.
+    if (IC.BasePointer.Instrument)
+      instrumentBasePointer(*CI);
   }
 
   return true;
@@ -700,6 +705,10 @@ bool InstrumentorImpl::instrumentAllocationCall(CallBase &I,
     I.replaceUsesWithIf(tryToCast(IRB, CI, I.getType(), DL), [&](Use &U) {
       return NewInsts.lookup(cast<Instruction>(U.getUser())) != Epoche;
     });
+
+    // This generates a base pointer.
+    if (IC.BasePointer.Instrument)
+      instrumentBasePointer(*CI);
   }
 
   return true;
@@ -1167,7 +1176,7 @@ bool InstrumentorImpl::instrumentFunction(Function &Fn) {
   if (IC.BasePointer.Instrument)
     for (auto &Arg : Fn.args())
       if (Arg.getType() == PtrTy)
-        instrumentBasePointer(Arg);
+        Changed |= instrumentBasePointer(Arg);
 
   ReversePostOrderTraversal<Function *> RPOT(&Fn);
   for (auto &It : RPOT) {
@@ -1184,6 +1193,7 @@ bool InstrumentorImpl::instrumentFunction(Function &Fn) {
       case Instruction::Call:
       case Instruction::Load:
       case Instruction::PHI:
+      case Instruction::IntToPtr:
         if (IC.BasePointer.Instrument)
           if (I.getType() == PtrTy)
             Changed |= instrumentBasePointer(I);
@@ -1555,29 +1565,16 @@ Value * InstrumentorImpl::findBasePointer(Value *V) {
   if (!IC.BasePointer.Instrument || !IC.BasePointer.ReturnPointerInfo)
     return nullptr;
 
-  while (auto *I = dyn_cast<Instruction>(V)) {
-    bool KeepSearching = false;
-    switch (I->getOpcode()) {
-    case Instruction::GetElementPtr:
-      V = cast<GetElementPtrInst>(I)->getPointerOperand();
-      KeepSearching = true;
-      break;
-    case Instruction::AddrSpaceCast:
-      V = cast<AddrSpaceCastInst>(I)->getPointerOperand();
-      KeepSearching = true;
-      break;
-    default:
-      break;
-    }
+  Value *UO = getUnderlyingObject(V, 10);
 
-    if (!KeepSearching)
-      break;
-  }
+  auto It = BasePtrMap.find(UO);
+  if (It != BasePtrMap.end())
+    return It->second;
 
-  auto It = BasePtrMap.find(V);
-  if (It == BasePtrMap.end())
-    return nullptr;
-  return It->second;
+  // It must be a global variable. Otherwise, there are pointer
+  // originators that are not instrumented yet.
+  assert(isa<GlobalVariable>(UO));
+  return nullptr;
 }
 
 void InstrumentorImpl::addCtorOrDtor(bool Ctor) {
