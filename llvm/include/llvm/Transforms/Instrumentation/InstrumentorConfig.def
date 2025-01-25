@@ -73,7 +73,7 @@ RTVALUE(store, AtomicityOrdering, true, "int32_t", PLAIN)
 RTVALUE(store, SyncScopeId, true, "int8_t", PLAIN)
 /// The volatile flag.
 RTVALUE(store, IsVolatile, true, "int8_t", BOOLEAN)
-/// The pointer base info. See BasePointer.
+/// The pointer base info. See base_pointer.
 RTVALUE(store, BasePointerInfo, true, "void*", PLAIN)
 ///}
 
@@ -113,7 +113,7 @@ RTVALUE(load, AtomicityOrdering, true, "int32_t", PLAIN)
 RTVALUE(load, SyncScopeId, true, "int8_t", PLAIN)
 /// The volatile flag.
 RTVALUE(load, IsVolatile, true, "int8_t", BOOLEAN)
-/// The pointer base info. See BasePointer.
+/// The pointer base info. See base_pointer.
 RTVALUE(load, BasePointerInfo, true, "void*", PLAIN)
 ///}
 
