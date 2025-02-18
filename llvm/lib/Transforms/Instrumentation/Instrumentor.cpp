@@ -777,6 +777,7 @@ void InstrumentationConfig::populate(InstrumentorIRBuilderTy &IIRB) {
   ModuleIO::populate(*this, IIRB.Ctx);
   GlobalIO::populate(*this, IIRB.Ctx);
   AllocaIO::populate(*this, IIRB.Ctx);
+  BranchIO::populate(*this, IIRB.Ctx);
   StoreIO::populate(*this, IIRB);
   LoadIO::populate(*this, IIRB);
   CallIO::populate(*this, IIRB.Ctx);
@@ -1556,6 +1557,17 @@ Value *BranchIO::getValue(Value &V, Type &Ty, InstrumentationConfig &IConf,
   if (BI.isUnconditional())
     return getCI(&Ty, 1);
   return BI.getCondition();
+}
+
+Value *BranchIO::setValue(Value &V, Value &NewV, InstrumentationConfig &IConf,
+                          InstrumentorIRBuilderTy &IIRB) {
+  auto *BI = cast<BranchInst>(&V);
+  if (BI->isConditional()) {
+    auto Cast = tryToCast(IIRB.IRB, &NewV, BI->getCondition()->getType(),
+                          IIRB.DL, true);
+    BI->setCondition(Cast);
+  }
+  return BI;
 }
 
 Value *BranchIO::getNumSuccessors(Value &V, Type &Ty,
