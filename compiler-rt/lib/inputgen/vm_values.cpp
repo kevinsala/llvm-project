@@ -9,7 +9,7 @@
 
 using namespace __ig;
 
-extern thread_local ObjectManager ThreadOM;
+extern ObjectManager ThreadOM;
 
 FreeValueInfo::FreeValueInfo(uint32_t TypeId, uint32_t Size, char *VPtr)
     : TypeId(TypeId), Size(Size), VPtr(VPtr), MPtr(nullptr) {}
@@ -53,14 +53,11 @@ bool FreeValueInfo::isFixed() {
   }
 
   if (!isMemcmp()) {
-    bool IsInitialized;
+    bool AnyInitialized = false, AllInitialized = true;
     auto *BP = ThreadOM.getBasePtrInfo(VPtr);
     MPtr = ThreadOM.decodeForAccess(VPtr, Size, TypeId, CHECK_INITIALIZED, BP,
-                                    IsInitialized);
-    printf("%s %p : %p : %i: %i\n", TypeId == 14 ? "ptr" : "int", VPtr, MPtr,
-           Size, IsInitialized);
-    if (IsInitialized) {
-      printf("--> %p\n", *(void **)MPtr);
+                                    AnyInitialized, AllInitialized);
+    if (AnyInitialized) {
       return IsFixed = true;
     }
   } else {
@@ -68,23 +65,25 @@ bool FreeValueInfo::isFixed() {
       // 0-length strings are equal.
       return IsFixed = true;
     }
-    bool IsInitialized1 = true, IsInitialized2 = true;
+    bool AnyInitialized1 = false, AllInitialized1 = true;
+    bool AnyInitialized2 = false, AllInitialized2 = true;
     MPtr = VPtr;
     MCmpPtr = VCmpPtr;
     bool UnknownSize = (CmpSize == (size_t)-1);
     auto *BP1 = ThreadOM.getBasePtrInfo(VPtr);
     if (BP1)
       MPtr = ThreadOM.decodeForAccess(VPtr, UnknownSize ? 1 : CmpSize, TypeId,
-                                      CHECK_INITIALIZED, BP1, IsInitialized1);
+                                      CHECK_INITIALIZED, BP1, AnyInitialized1, AllInitialized1);
     auto *BP2 = ThreadOM.getBasePtrInfo(VCmpPtr);
     if (BP2)
       MCmpPtr =
           ThreadOM.decodeForAccess(VCmpPtr, UnknownSize ? 1 : CmpSize, TypeId,
-                                   CHECK_INITIALIZED, BP2, IsInitialized2);
+                                   CHECK_INITIALIZED, BP2, AnyInitialized2, AllInitialized2);
     MCmpPtr = VCmpPtr;
-    if (IsInitialized1 == IsInitialized2)
+    // TODO: Deal with partially initialized memory.
+    if (AnyInitialized1 == AnyInitialized2)
       return IsFixed = true;
-    if (IsInitialized1) {
+    if (AnyInitialized1) {
       std::swap(MPtr, MCmpPtr);
       std::swap(VPtr, VCmpPtr);
     }
@@ -129,13 +128,13 @@ char *FreeValueInfo::write(FreeValueManager &FVM) {
 
 void FreeValueInfo::markInitialized(FreeValueManager &FVM, char *VP,
                                     char *VPC) {
-  bool IsInitialized;
+  bool AnyInitialized = false, AllInitialized = true;
   if (auto *BP1 = ThreadOM.getBasePtrInfo(VPtr))
     ThreadOM.decodeForAccess(VPtr, getWrittenSize(FVM), TypeId, BCI_READ, BP1,
-                             IsInitialized);
+                             AnyInitialized, AllInitialized);
   if (auto *BP1 = ThreadOM.getBasePtrInfo(VCmpPtr))
     ThreadOM.decodeForAccess(VPtr, getWrittenSize(FVM), TypeId, BCI_READ, BP1,
-                             IsInitialized);
+                             AnyInitialized, AllInitialized);
 }
 
 void FreeValueManager::checkBranchConditions(char *VP, char *VPBP, char *VCP,
@@ -148,6 +147,8 @@ void FreeValueManager::checkBranchConditions(char *VP, char *VPBP, char *VCP,
   auto CollectBCIs = [&](char *VPtr) {
     if (auto *BCIVec = lookupBCIVec(VPtr))
       for (auto *BCI : *BCIVec) {
+        if (BCI->IsFixed)
+          continue;
         if (!SeenBCIs.insert(BCI).second)
           continue;
         bool HasFreeValues = false;
@@ -159,15 +160,18 @@ void FreeValueManager::checkBranchConditions(char *VP, char *VPBP, char *VCP,
         }
         if (HasFreeValues) {
           FreeBCIs.push_back(BCI);
-        } else if (!evaluate(*BCI)) {
-          INFO("Inconsistent branch condition found, abort\n");
-          error(1007);
+        } else {
+          BCI->IsFixed = true;
+          if (!evaluate(*BCI)) {
+            INFO("Inconsistent branch condition found, abort\n");
+            error(1007);
+          }
         }
       }
   };
-  if ((uint64_t)VPBP == 2)
+  if (VP)
     CollectBCIs(VP);
-  if ((uint64_t)VCPBP == 2)
+  if (VCP)
     CollectBCIs(VCP);
 
   if (FreeBCIs.empty())
@@ -273,7 +277,7 @@ bool FreeValueManager::evaluate(BranchConditionInfo &BCI, bool B) {
 }
 
 void FreeValueManager::reset() {
-  for (auto &[No, BCIPtr] : BranchConditionMap) {
+  for (auto *BCIPtr : BranchConditionMap) {
     delete[] BCIPtr->ArgMemPtr;
     delete BCIPtr;
   }

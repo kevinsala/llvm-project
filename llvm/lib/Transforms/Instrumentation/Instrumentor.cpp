@@ -326,6 +326,9 @@ public:
             },
             [this](Function &F) -> ScalarEvolution & {
               return FAM.getResult<ScalarEvolutionAnalysis>(F);
+            },
+            [this](Function &F) -> LoopInfo & {
+              return FAM.getResult<LoopAnalysis>(F);
             }) {
     IConf.populate(IIRB);
   }
@@ -369,6 +372,24 @@ private:
 
   bool instrumentFunction(Function &Fn);
   bool instrumentModule();
+
+  bool preprocessLoops(Function &Fn) {
+    bool Changed = false;
+    auto *LVRIO =
+        IConf.IChoices[InstrumentationLocation::SPECIAL_VALUE]["loop_value_range"];
+    if (!LVRIO || !LVRIO->Enabled)
+      return Changed;
+
+    auto &LI = FAM.getResult<LoopAnalysis>(Fn);
+    auto &DT = FAM.getResult<DominatorTreeAnalysis>(Fn);
+    for (auto *L : LI) {
+      if (!L->getLoopPreheader()) {
+        InsertPreheaderForLoop(L, &DT, &LI, nullptr, true);
+        Changed = true;
+      }
+    }
+    return Changed;
+  }
 
   template <typename MemoryInstTy> bool analyzeAccess(MemoryInstTy &I);
 
@@ -429,6 +450,8 @@ bool InstrumentorImpl::instrumentFunction(Function &Fn) {
   bool Changed = false;
   if (!shouldInstrumentFunction(Fn))
     return Changed;
+
+  Changed |= preprocessLoops(Fn);
 
   InstrumentationCaches ICaches;
 
@@ -544,15 +567,6 @@ bool InstrumentorImpl::instrumentModule() {
 
 bool InstrumentorImpl::instrument() {
   bool Changed = false;
-  for (auto &Fn : M) {
-    if (Fn.isDeclaration())
-      continue;
-    auto &LI = FAM.getResult<LoopAnalysis>(Fn);
-    auto &DT = FAM.getResult<DominatorTreeAnalysis>(Fn);
-    for (auto *L : LI)
-      if (!L->getLoopPreheader())
-        InsertPreheaderForLoop(L, &DT, &LI, nullptr, true);
-  }
 
   for (auto &ChoiceIt :
        IConf.IChoices[InstrumentationLocation::INSTRUCTION_PRE])
@@ -580,9 +594,20 @@ InstrumentorIRBuilderTy::getBestHoistPoint(BasicBlock::iterator IP,
     return IP;
   case HOIST_IN_BLOCK:
     return BlockIP;
+  case HOIST_OUT_OF_LOOPS: {
+    auto &LI = LIGetter(*BlockIP->getFunction());
+    auto *L = LI.getLoopFor(BlockIP->getParent());
+    while (L) {
+      assert(L->getLoopPreheader());
+      IP = L->getLoopPreheader()->getFirstNonPHIOrDbgOrAlloca();
+      L = L->getParentLoop();
+    }
+    return IP;
+  }
   case HOIST_MAXIMALLY:
     return IP->getFunction()->getEntryBlock().getFirstNonPHIOrDbgOrAlloca();
   }
+  llvm_unreachable("Unknown kind!");
 }
 InstrumentorIRBuilderTy::HoistResult
 InstrumentorIRBuilderTy::hoistInstructionsAndAdjustIP(Instruction &I,
@@ -643,12 +668,21 @@ InstrumentorIRBuilderTy::hoistInstructionsAndAdjustIP(Instruction &I,
 }
 
 std::pair<BasicBlock::iterator, bool>
-InstrumentorIRBuilderTy::computeLoopRangeValues(Value &V) {
+InstrumentorIRBuilderTy::computeLoopRangeValues(Value &V,
+                                                uint32_t AdditionalSize) {
   std::pair<Value *, Value *> &Values = LoopRangeValueMap[&V];
   if (Values.first)
     return {BasicBlock::iterator(), false};
-  auto &SE = SEGetter(*IRB.GetInsertBlock()->getParent());
-  auto *VSCEV = SE.getSCEV(&V);
+  auto *BB = IRB.GetInsertBlock();
+  auto *Fn = BB->getParent();
+  auto &SE = SEGetter(*Fn);
+  auto &LI = LIGetter(*Fn);
+  auto *BBLoop = LI.getLoopFor(BB);
+  if (!BBLoop) {
+    LLVM_DEBUG(errs() << " - value not in a loop " << V << "\n");
+    return {BasicBlock::iterator(), false};
+  }
+  auto *VSCEV = SE.getSCEVAtScope(&V, BBLoop);
   if (isa<SCEVCouldNotCompute>(VSCEV)) {
     LLVM_DEBUG(errs() << " - loop evaluation not computable for " << V << "\n");
     return {BasicBlock::iterator(), false};
@@ -663,6 +697,8 @@ InstrumentorIRBuilderTy::computeLoopRangeValues(Value &V) {
 
   SmallVector<const Loop *, 8> LoopsOrdered;
   for (auto *L : Loops) {
+    if (!L->contains(BBLoop))
+      continue;
     auto Depth = L->getLoopDepth();
     if (Depth >= LoopsOrdered.size())
       LoopsOrdered.resize(Depth + 1);
@@ -670,31 +706,31 @@ InstrumentorIRBuilderTy::computeLoopRangeValues(Value &V) {
     LoopsOrdered[Depth] = L;
   }
 
-  auto *MinSCEV = VSCEV;
-  auto *MaxSCEV = VSCEV;
+  auto *FirstSCEV = VSCEV;
+  auto *LastSCEV = VSCEV;
   auto *Ty = VSCEV->getType();
   for (int32_t I = LoopsOrdered.size() - 1; I >= 0; --I) {
     auto *L = LoopsOrdered[I];
     if (!L)
       continue;
-    if (!SE.hasComputableLoopEvolution(MinSCEV, L) ||
-        !SE.hasComputableLoopEvolution(MaxSCEV, L) ||
+    if (!SE.hasComputableLoopEvolution(FirstSCEV, L) ||
+        !SE.hasComputableLoopEvolution(LastSCEV, L) ||
         !SE.hasLoopInvariantBackedgeTakenCount(L) ||
         isa<SCEVCouldNotCompute>(SE.getBackedgeTakenCount(L))) {
       LLVM_DEBUG(errs() << " -- loop at depth " << I
-                        << " not computable:" << *MinSCEV << " : " << *MaxSCEV
-                        << " in " << L->getName() << "\n");
+                        << " not computable:" << *FirstSCEV << " : "
+                        << *LastSCEV << " in " << L->getName() << "\n");
       break;
     }
-    LoopToScevMapT MinL2SMap, MaxL2SMap;
-    MinL2SMap[L] = SE.getZero(Ty);
-    MaxL2SMap[L] = SE.getBackedgeTakenCount(L);
-    LLVM_DEBUG(errs() << "L -> " << *MinL2SMap[L] << " : " << *MaxL2SMap[L]
+    LoopToScevMapT FirstL2SMap, LastL2SMap;
+    FirstL2SMap[L] = SE.getZero(Ty);
+    LastL2SMap[L] = SE.getBackedgeTakenCount(L);
+    LLVM_DEBUG(errs() << "L -> " << *FirstL2SMap[L] << " : " << *LastL2SMap[L]
                       << "\n");
-    MinSCEV = SCEVLoopAddRecRewriter::rewrite(MinSCEV, MinL2SMap, SE);
-    MaxSCEV = SCEVLoopAddRecRewriter::rewrite(MaxSCEV, MaxL2SMap, SE);
+    FirstSCEV = SCEVLoopAddRecRewriter::rewrite(FirstSCEV, FirstL2SMap, SE);
+    LastSCEV = SCEVLoopAddRecRewriter::rewrite(LastSCEV, LastL2SMap, SE);
   }
-  if (MaxSCEV == VSCEV) {
+  if (LastSCEV == VSCEV) {
     LLVM_DEBUG(errs() << " - outermost loop not computable " << *VSCEV << "\n");
     return {BasicBlock::iterator(), false};
   }
@@ -702,14 +738,22 @@ InstrumentorIRBuilderTy::computeLoopRangeValues(Value &V) {
   SCEVExpander Expander(SE, DL, ".vrange");
   auto IP = IRB.GetInsertPoint();
   Expander.setInsertPoint(IP);
-  Value *MinVal = Expander.expandCodeFor(MinSCEV, Ty);
-  Value *MaxVal = Expander.expandCodeFor(MaxSCEV, Ty);
-  IP = getBestHoistPoint(IP, HOIST_MAXIMALLY);
-  if (auto *MinValI = dyn_cast<Instruction>(MinVal))
-    IP = hoistInstructionsAndAdjustIP(*MinValI, HOIST_MAXIMALLY, IP).IP;
-  if (auto *MaxValI = dyn_cast<Instruction>(MaxVal))
-    IP = hoistInstructionsAndAdjustIP(*MaxValI, HOIST_MAXIMALLY, IP).IP;
-  Values = {MinVal, MaxVal};
+
+  auto *TmpSCEV = FirstSCEV;
+  FirstSCEV = SE.getUMinExpr(TmpSCEV, LastSCEV);
+  LastSCEV = SE.getUMaxExpr(TmpSCEV, LastSCEV);
+
+  auto *AdditionalSizeSCEV = SE.getConstant(Ty, AdditionalSize, true);
+  LastSCEV = SE.getAddExpr(LastSCEV, AdditionalSizeSCEV);
+
+  Value *FirstVal = Expander.expandCodeFor(FirstSCEV, Ty);
+  Value *LastVal = Expander.expandCodeFor(LastSCEV, Ty);
+  IP = getBestHoistPoint(IP, HOIST_OUT_OF_LOOPS);
+  if (auto *FirstValI = dyn_cast<Instruction>(FirstVal))
+    IP = hoistInstructionsAndAdjustIP(*FirstValI, HOIST_OUT_OF_LOOPS, IP).IP;
+  if (auto *LastValI = dyn_cast<Instruction>(LastVal))
+    IP = hoistInstructionsAndAdjustIP(*LastValI, HOIST_OUT_OF_LOOPS, IP).IP;
+  Values = {FirstVal, LastVal};
   return {IP, true};
 }
 
@@ -832,7 +876,8 @@ InstrumentationConfig::getBasePointerInfo(Value &V,
 }
 
 Value *InstrumentationConfig::getLoopValueRange(Value &V,
-                                                InstrumentorIRBuilderTy &IIRB) {
+                                                InstrumentorIRBuilderTy &IIRB,
+                                                uint32_t AdditionalSize) {
   Function *Fn = IIRB.IRB.GetInsertBlock()->getParent();
   auto &SE = IIRB.SEGetter(*Fn);
 
@@ -860,6 +905,7 @@ Value *InstrumentationConfig::getLoopValueRange(Value &V,
     // Use fresh caches for safety, as this function may be called from
     // another instrumentation opportunity.
     InstrumentationCaches ICaches;
+    static_cast<LoopValueRangeIO *>(LVRIO)->setAdditionalSize(AdditionalSize);
     LVR = LVRIO->instrument(VPtr, *this, IIRB, ICaches);
     if (!LVR)
       return LVR = Constant::getNullValue(LVRIO->getRetTy(IIRB.Ctx));
@@ -1320,7 +1366,9 @@ Value *StoreIO::getLoopValueRangeInfo(Value &V, Type &Ty,
                                       InstrumentationConfig &IConf,
                                       InstrumentorIRBuilderTy &IIRB) {
   auto &SI = cast<StoreInst>(V);
-  return IConf.getLoopValueRange(*SI.getPointerOperand(), IIRB);
+  return IConf.getLoopValueRange(
+      *SI.getPointerOperand(), IIRB,
+      IIRB.DL.getTypeStoreSize(SI.getValueOperand()->getType()));
 }
 Value *StoreIO::getValue(Value &V, Type &Ty, InstrumentationConfig &IConf,
                          InstrumentorIRBuilderTy &IIRB) {
@@ -1386,7 +1434,8 @@ Value *LoadIO::getLoopValueRangeInfo(Value &V, Type &Ty,
                                      InstrumentationConfig &IConf,
                                      InstrumentorIRBuilderTy &IIRB) {
   auto &LI = cast<LoadInst>(V);
-  return IConf.getLoopValueRange(*LI.getPointerOperand(), IIRB);
+  return IConf.getLoopValueRange(*LI.getPointerOperand(), IIRB,
+                                 IIRB.DL.getTypeStoreSize(LI.getType()));
 }
 Value *LoadIO::getValue(Value &V, Type &Ty, InstrumentationConfig &IConf,
                         InstrumentorIRBuilderTy &IIRB) {
@@ -1542,7 +1591,9 @@ Value *CallIO::setCallParameters(Value &V, Value &NewV,
 Value *CallIO::isDefinition(Value &V, Type &Ty, InstrumentationConfig &IConf,
                             InstrumentorIRBuilderTy &IIRB) {
   auto &CI = cast<CallInst>(V);
-  return getCI(&Ty, !CI.getCalledFunction()->isDeclaration());
+  if (auto *Fn = CI.getCalledFunction())
+    return getCI(&Ty, !Fn->isDeclaration());
+  return getCI(&Ty, 0);
 }
 
 Value *BranchIO::isConditional(Value &V, Type &Ty, InstrumentationConfig &IConf,

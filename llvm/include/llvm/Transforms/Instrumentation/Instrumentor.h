@@ -48,6 +48,7 @@ namespace instrumentor {
 enum HoistKindTy {
   DO_NOT_HOIST = 0,
   HOIST_IN_BLOCK,
+  HOIST_OUT_OF_LOOPS,
   HOIST_MAXIMALLY,
 };
 
@@ -58,14 +59,16 @@ struct InstrumentorIRBuilderTy {
   using TLIGetterTy = std::function<TargetLibraryInfo &(Function &F)>;
   using DTGetterTy = std::function<DominatorTree &(Function &F)>;
   using SEGetterTy = std::function<ScalarEvolution &(Function &F)>;
+  using LIGetterTy = std::function<LoopInfo &(Function &F)>;
 
   InstrumentorIRBuilderTy(Module &M, TLIGetterTy &&TLIGetter,
-                          DTGetterTy &&DTGetter, SEGetterTy &&SEGetter)
+                          DTGetterTy &&DTGetter, SEGetterTy &&SEGetter,
+                          LIGetterTy &&LIGetter)
       : M(M), Ctx(M.getContext()), TLIGetter(TLIGetter), DTGetter(DTGetter),
-        SEGetter(SEGetter), IRB(Ctx, ConstantFolder(),
-                                IRBuilderCallbackInserter([&](Instruction *I) {
-                                  NewInsts[I] = Epoche;
-                                })) {}
+        SEGetter(SEGetter), LIGetter(LIGetter),
+        IRB(Ctx, ConstantFolder(),
+            IRBuilderCallbackInserter(
+                [&](Instruction *I) { NewInsts[I] = Epoche; })) {}
   ~InstrumentorIRBuilderTy() {
     for (auto *I : ToBeErased) {
       if (!I->getType()->isVoidTy())
@@ -121,7 +124,8 @@ struct InstrumentorIRBuilderTy {
 
   DenseMap<Value *, std::pair<Value *, Value *>> LoopRangeValueMap;
 
-  std::pair<BasicBlock::iterator, bool> computeLoopRangeValues(Value &V);
+  std::pair<BasicBlock::iterator, bool>
+  computeLoopRangeValues(Value &V, uint32_t AdditionalSize);
 
   Value *getInitialLoopValue(Value &V) {
     return std::get<0>(LoopRangeValueMap[&V]);
@@ -159,6 +163,7 @@ struct InstrumentorIRBuilderTy {
   TLIGetterTy TLIGetter;
   DTGetterTy DTGetter;
   SEGetterTy SEGetter;
+  LIGetterTy LIGetter;
 
   IRBuilder<ConstantFolder, IRBuilderCallbackInserter> IRB;
   /// Each instrumentation, i.a., of an instruction, is happening in a dedicated
@@ -262,7 +267,7 @@ struct InstrumentationLocation {
     INSTRUCTION_PRE,
     INSTRUCTION_POST,
     SPECIAL_VALUE,
-    Last,
+    Last = SPECIAL_VALUE,
   };
 
   InstrumentationLocation(KindTy Kind) : Kind(Kind) {
@@ -297,10 +302,8 @@ struct InstrumentationLocation {
       return "instruction_post";
     case SPECIAL_VALUE:
       return "special_value";
-    case Last:
-      llvm_unreachable("Invalid kind!");
-    };
-    return "<unknown>";
+    }
+    llvm_unreachable("Invalid kind!");
   }
   static KindTy getKindFromStr(StringRef S) {
     return StringSwitch<KindTy>(S)
@@ -331,15 +334,14 @@ struct InstrumentationLocation {
     case INSTRUCTION_POST:
     case SPECIAL_VALUE:
       return false;
-    case Last:
-      llvm_unreachable("Invalid kind!");
-    };
+    }
+    llvm_unreachable("Invalid kind!");
   }
   bool isPRE() const { return isPRE(Kind); }
 
   unsigned getOpcode() const {
-    assert(Kind == INSTRUCTION_PRE ||
-           Kind == INSTRUCTION_POST && "Expected instruction!");
+    assert((Kind == INSTRUCTION_PRE || Kind == INSTRUCTION_POST) &&
+           "Expected instruction!");
     return Opcode;
   }
 
@@ -444,7 +446,8 @@ struct InstrumentationConfig {
   Value *getBasePointerInfo(Value &V, InstrumentorIRBuilderTy &IIRB);
 
   DenseMap<std::pair<const SCEV *, Function *>, Value *> LoopValueRangeMap;
-  Value *getLoopValueRange(Value &V, InstrumentorIRBuilderTy &IIRB);
+  Value *getLoopValueRange(Value &V, InstrumentorIRBuilderTy &IIRB,
+                           uint32_t AdditionalSize);
 
   /// Mapping to remember global strings passed to the runtime.
   DenseMap<StringRef, Constant *> GlobalStringsMap;
@@ -1090,7 +1093,7 @@ struct LoopValueRangeIO : public InstrumentationOpportunity {
                             InstrumentationCaches &ICaches) override {
     if (CB && !CB(*V))
       return nullptr;
-    auto [IP, Success] = IIRB.computeLoopRangeValues(*V);
+    auto [IP, Success] = IIRB.computeLoopRangeValues(*V, AdditionalSize);
     if (!Success)
       return nullptr;
     IIRB.IRB.SetInsertPoint(IP);
@@ -1100,6 +1103,10 @@ struct LoopValueRangeIO : public InstrumentationOpportunity {
   virtual Type *getRetTy(LLVMContext &Ctx) const override {
     return PointerType::getUnqual(Ctx);
   }
+
+  void setAdditionalSize(uint32_t AS) { AdditionalSize = AS; }
+
+  uint32_t AdditionalSize = 0;
 };
 
 struct FunctionIO : public InstrumentationOpportunity {

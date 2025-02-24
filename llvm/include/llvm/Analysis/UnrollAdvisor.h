@@ -49,12 +49,16 @@ public:
   using InstrumentationInfo = std::optional<InstrumentationNames>;
 
   InstrumentationInfo recordUnrolling(const LoopUnrollResult &Result) {
+    if (!AdviceGiven)
+      return recordUnattemptedUnrolling();
     markRecorded();
-    return recordUnrollingImpl();
+    return recordUnrollingImpl(Result);
   }
 
   InstrumentationInfo
   recordUnsuccessfulUnrolling(const LoopUnrollResult &Result) {
+    if (!AdviceGiven)
+      return recordUnattemptedUnrolling();
     markRecorded();
     return recordUnsuccessfulUnrollingImpl(Result);
   }
@@ -64,10 +68,16 @@ public:
     return recordUnattemptedUnrollingImpl();
   }
 
-  std::optional<unsigned> getRecommendedUnrollFactor() const { return Factor; }
+  std::optional<unsigned> getRecommendedUnrollFactor() {
+    AdviceGiven = true;
+    return Factor;
+  }
 
 protected:
-  virtual InstrumentationInfo recordUnrollingImpl() { return std::nullopt; }
+  virtual InstrumentationInfo
+  recordUnrollingImpl(const LoopUnrollResult &Result) {
+    return std::nullopt;
+  }
   virtual InstrumentationInfo
   recordUnsuccessfulUnrollingImpl(const LoopUnrollResult &Result) {
     return std::nullopt;
@@ -87,6 +97,7 @@ private:
   void recordUnrollStatsIfNeeded();
 
   bool Recorded = false;
+  bool AdviceGiven = false;
 };
 
 /// Interface for deciding whether to inline a call site or not.
@@ -105,10 +116,11 @@ private:
   friend class UnrollAdvice;
 };
 
-UnrollAdvisor &getUnrollAdvisor();
+UnrollAdvisor &getUnrollAdvisor(LLVMContext &Ctx);
 
-std::unique_ptr<UnrollAdvisor> getDefaultModeUnrollAdvisor();
-std::unique_ptr<UnrollAdvisor> getDevelopmentModeUnrollAdvisor();
+std::unique_ptr<UnrollAdvisor> getDefaultModeUnrollAdvisor(LLVMContext &Ctx);
+std::unique_ptr<UnrollAdvisor>
+getDevelopmentModeUnrollAdvisor(LLVMContext &Ctx);
 
 /// The default heuristic
 std::optional<unsigned>
