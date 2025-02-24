@@ -916,6 +916,39 @@ struct UnreachableIO : public InstructionIO<Instruction::Unreachable> {
   }
 };
 
+struct BranchIO : public InstructionIO<Instruction::Br> {
+  BranchIO() : InstructionIO<Instruction::Br>(/*IsPRE*/ true) {}
+  virtual ~BranchIO(){};
+
+  void init(InstrumentationConfig &IConf, LLVMContext &Ctx) {
+    IRTArgs.push_back(IRTArg(IntegerType::getInt8Ty(Ctx), "is_conditional",
+                             "Flag indicating a conditional branch.",
+                             IRTArg::NONE, isConditional));
+    IRTArgs.push_back(IRTArg(IntegerType::getInt8Ty(Ctx), "value",
+                             "Value of condition.", IRTArg::REPLACABLE,
+                             getValue, setValue));
+    IRTArgs.push_back(IRTArg(PointerType::getInt64Ty(Ctx), "num_successors",
+                             "Number of branch successors.", IRTArg::NONE,
+                             getNumSuccessors));
+    IConf.addChoice(*this);
+  }
+
+  static void populate(InstrumentationConfig &IConf, LLVMContext &Ctx) {
+    auto *AIC = IConf.allocate<BranchIO>();
+    AIC->init(IConf, Ctx);
+  }
+
+  static Value *isConditional(Value &V, Type &Ty, InstrumentationConfig &IConf,
+                              InstrumentorIRBuilderTy &IIRB);
+  static Value *getValue(Value &V, Type &Ty, InstrumentationConfig &IConf,
+                         InstrumentorIRBuilderTy &IIRB);
+  static Value *setValue(Value &V, Value &NewV, InstrumentationConfig &IConf,
+                         InstrumentorIRBuilderTy &IIRB);
+  static Value *getNumSuccessors(Value &V, Type &Ty,
+                                 InstrumentationConfig &IConf,
+                                 InstrumentorIRBuilderTy &IIRB);
+};
+
 struct ICmpIO : public InstructionIO<Instruction::ICmp> {
   ICmpIO(bool IsPRE) : InstructionIO<Instruction::ICmp>(IsPRE) {}
   virtual ~ICmpIO() {};
