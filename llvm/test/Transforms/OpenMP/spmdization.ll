@@ -226,6 +226,7 @@ define weak ptx_kernel void @__omp_offloading_fd02_2044372e_sequential_loop_l5()
 ; NVPTX-DISABLED2-SAME: () #[[ATTR0:[0-9]+]] {
 ; NVPTX-DISABLED2-NEXT:    call void @__omp_offloading_fd02_2044372e_sequential_loop_l5__debug()
 ; NVPTX-DISABLED2-NEXT:    ret void
+;
   call void @__omp_offloading_fd02_2044372e_sequential_loop_l5__debug()
   ret void
 }
@@ -466,6 +467,7 @@ define internal void @__omp_offloading_fd02_2044372e_sequential_loop_l5__debug()
 ; NVPTX-DISABLED2-NEXT:    call void @__omp_outlined__(ptr [[DOTTHREADID_TEMP_]], ptr [[DOTZERO_ADDR]]) #[[ATTR4]]
 ; NVPTX-DISABLED2-NEXT:    call void @__kmpc_target_deinit()
 ; NVPTX-DISABLED2-NEXT:    br label [[COMMON_RET]]
+;
 entry:
   %.zero.addr = alloca i32, align 4
   %.threadid_temp. = alloca i32, align 4
@@ -594,6 +596,7 @@ define internal void @__omp_outlined__(ptr noalias %.global_tid., ptr noalias %.
 ; NVPTX-DISABLED2-NEXT:    call void @__kmpc_parallel_51(ptr @[[GLOB1]], i32 [[TMP0]], i32 1, i32 -1, i32 -1, ptr @__omp_outlined__1, ptr @__omp_outlined__1_wrapper.ID, ptr [[CAPTURED_VARS_ADDRS]], i64 0)
 ; NVPTX-DISABLED2-NEXT:    [[INC]] = add nsw i32 [[I_0]], 1
 ; NVPTX-DISABLED2-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP16:![0-9]+]]
+;
 entry:
   %captured_vars_addrs = alloca [0 x ptr], align 8
   br label %for.cond
@@ -651,6 +654,7 @@ define internal void @__omp_outlined__1(ptr noalias %.global_tid., ptr noalias %
 ; NVPTX-DISABLED2-NEXT:  entry:
 ; NVPTX-DISABLED2-NEXT:    call void @unknown() #[[ATTR8:[0-9]+]]
 ; NVPTX-DISABLED2-NEXT:    ret void
+;
 entry:
   call void @unknown() #11
   ret void
@@ -717,6 +721,7 @@ define internal void @__omp_outlined__1_wrapper(i16 zeroext %0, i32 %1) #3 {
 ; NVPTX-DISABLED2-NEXT:    call void @__kmpc_get_shared_variables(ptr [[GLOBAL_ARGS]])
 ; NVPTX-DISABLED2-NEXT:    call void @__omp_outlined__1(ptr [[DOTADDR1]], ptr [[DOTZERO_ADDR]]) #[[ATTR4]]
 ; NVPTX-DISABLED2-NEXT:    ret void
+;
 entry:
   %.addr1 = alloca i32, align 4
   %.zero.addr = alloca i32, align 4
@@ -965,6 +970,7 @@ define weak ptx_kernel void @__omp_offloading_fd02_2044372e_sequential_loop_to_s
 ; NVPTX-DISABLED2-NEXT:    call void @__omp_outlined__2(ptr [[DOTTHREADID_TEMP_]], ptr [[DOTZERO_ADDR]]) #[[ATTR4]]
 ; NVPTX-DISABLED2-NEXT:    call void @__kmpc_target_deinit()
 ; NVPTX-DISABLED2-NEXT:    br label [[COMMON_RET]]
+;
 entry:
   %.zero.addr = alloca i32, align 4
   %.threadid_temp. = alloca i32, align 4
@@ -1108,6 +1114,7 @@ define internal void @__omp_outlined__2(ptr noalias %.global_tid., ptr noalias %
 ; NVPTX-DISABLED2-NEXT:    call void @__kmpc_parallel_51(ptr @[[GLOB1]], i32 [[TMP0]], i32 1, i32 -1, i32 -1, ptr @__omp_outlined__3, ptr @__omp_outlined__3_wrapper.ID, ptr [[CAPTURED_VARS_ADDRS]], i64 0)
 ; NVPTX-DISABLED2-NEXT:    [[INC]] = add nsw i32 [[I_0]], 1
 ; NVPTX-DISABLED2-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP19:![0-9]+]]
+;
 entry:
   %captured_vars_addrs = alloca [0 x ptr], align 8
   %x = call align 4 ptr @__kmpc_alloc_shared(i64 4)
@@ -1167,6 +1174,7 @@ define internal void @__omp_outlined__3(ptr noalias %.global_tid., ptr noalias %
 ; NVPTX-DISABLED2-NEXT:  entry:
 ; NVPTX-DISABLED2-NEXT:    call void @unknown() #[[ATTR8]]
 ; NVPTX-DISABLED2-NEXT:    ret void
+;
 entry:
   call void @unknown() #11
   ret void
@@ -1233,6 +1241,7 @@ define internal void @__omp_outlined__3_wrapper(i16 zeroext %0, i32 %1) #3 {
 ; NVPTX-DISABLED2-NEXT:    call void @__kmpc_get_shared_variables(ptr [[GLOBAL_ARGS]])
 ; NVPTX-DISABLED2-NEXT:    call void @__omp_outlined__3(ptr [[DOTADDR1]], ptr [[DOTZERO_ADDR]]) #[[ATTR4]]
 ; NVPTX-DISABLED2-NEXT:    ret void
+;
 entry:
   %.addr1 = alloca i32, align 4
   %.zero.addr = alloca i32, align 4
@@ -1482,6 +1491,7 @@ define weak ptx_kernel void @__omp_offloading_fd02_2044372e_sequential_loop_to_s
 ; NVPTX-DISABLED2-NEXT:    call void @__omp_outlined__4(ptr [[DOTTHREADID_TEMP_]], ptr [[DOTZERO_ADDR]]) #[[ATTR4]]
 ; NVPTX-DISABLED2-NEXT:    call void @__kmpc_target_deinit()
 ; NVPTX-DISABLED2-NEXT:    br label [[COMMON_RET]]
+;
 entry:
   %.zero.addr = alloca i32, align 4
   %.threadid_temp. = alloca i32, align 4
@@ -1616,6 +1626,7 @@ define internal void @__omp_outlined__4(ptr noalias %.global_tid., ptr noalias %
 ; NVPTX-DISABLED2-NEXT:    call void @__kmpc_parallel_51(ptr @[[GLOB1]], i32 [[TMP0]], i32 1, i32 -1, i32 -1, ptr @__omp_outlined__5, ptr @__omp_outlined__5_wrapper.ID, ptr [[CAPTURED_VARS_ADDRS]], i64 1)
 ; NVPTX-DISABLED2-NEXT:    [[INC]] = add nsw i32 [[I_0]], 1
 ; NVPTX-DISABLED2-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP22:![0-9]+]]
+;
 entry:
   %captured_vars_addrs = alloca [1 x ptr], align 8
   %x = call align 4 ptr @__kmpc_alloc_shared(i64 4)
@@ -1694,6 +1705,7 @@ define internal void @__omp_outlined__5(ptr noalias %.global_tid., ptr noalias %
 ; NVPTX-DISABLED2-NEXT:    store i32 [[INC]], ptr [[X]], align 4, !tbaa [[TBAA12]]
 ; NVPTX-DISABLED2-NEXT:    call void @unknown() #[[ATTR8]]
 ; NVPTX-DISABLED2-NEXT:    ret void
+;
 entry:
   %0 = load i32, ptr %x, align 4, !tbaa !18
   %inc = add nsw i32 %0, 1
@@ -1775,6 +1787,7 @@ define internal void @__omp_outlined__5_wrapper(i16 zeroext %0, i32 %1) #3 {
 ; NVPTX-DISABLED2-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[TMP2]], align 8, !tbaa [[TBAA20]]
 ; NVPTX-DISABLED2-NEXT:    call void @__omp_outlined__5(ptr [[DOTADDR1]], ptr [[DOTZERO_ADDR]], ptr [[TMP3]]) #[[ATTR4]]
 ; NVPTX-DISABLED2-NEXT:    ret void
+;
 entry:
   %.addr1 = alloca i32, align 4
   %.zero.addr = alloca i32, align 4
@@ -2025,6 +2038,7 @@ define weak ptx_kernel void @__omp_offloading_fd02_2044372e_sequential_loop_to_s
 ; NVPTX-DISABLED2-NEXT:    call void @__omp_outlined__6(ptr [[DOTTHREADID_TEMP_]], ptr [[DOTZERO_ADDR]]) #[[ATTR4]]
 ; NVPTX-DISABLED2-NEXT:    call void @__kmpc_target_deinit()
 ; NVPTX-DISABLED2-NEXT:    br label [[COMMON_RET]]
+;
 entry:
   %.zero.addr = alloca i32, align 4
   %.threadid_temp. = alloca i32, align 4
@@ -2191,6 +2205,7 @@ define internal void @__omp_outlined__6(ptr noalias %.global_tid., ptr noalias %
 ; NVPTX-DISABLED2-NEXT:    call void @__kmpc_parallel_51(ptr @[[GLOB1]], i32 [[TMP0]], i32 1, i32 -1, i32 -1, ptr @__omp_outlined__7, ptr @__omp_outlined__7_wrapper.ID, ptr [[CAPTURED_VARS_ADDRS]], i64 1)
 ; NVPTX-DISABLED2-NEXT:    [[INC]] = add nsw i32 [[I_0]], 1
 ; NVPTX-DISABLED2-NEXT:    br label [[FOR_COND]], !llvm.loop [[LOOP23:![0-9]+]]
+;
 entry:
   %captured_vars_addrs = alloca [1 x ptr], align 8
   %x = call align 4 ptr @__kmpc_alloc_shared(i64 4)
@@ -2270,6 +2285,7 @@ define internal void @__omp_outlined__7(ptr noalias %.global_tid., ptr noalias %
 ; NVPTX-DISABLED2-NEXT:    store i32 [[INC]], ptr [[X]], align 4, !tbaa [[TBAA12]]
 ; NVPTX-DISABLED2-NEXT:    call void @unknowni32p(ptr [[X]]) #[[ATTR8]]
 ; NVPTX-DISABLED2-NEXT:    ret void
+;
 entry:
   %0 = load i32, ptr %x, align 4, !tbaa !18
   %inc = add nsw i32 %0, 1
@@ -2351,6 +2367,7 @@ define internal void @__omp_outlined__7_wrapper(i16 zeroext %0, i32 %1) #3 {
 ; NVPTX-DISABLED2-NEXT:    [[TMP3:%.*]] = load ptr, ptr [[TMP2]], align 8, !tbaa [[TBAA20]]
 ; NVPTX-DISABLED2-NEXT:    call void @__omp_outlined__7(ptr [[DOTADDR1]], ptr [[DOTZERO_ADDR]], ptr [[TMP3]]) #[[ATTR4]]
 ; NVPTX-DISABLED2-NEXT:    ret void
+;
 entry:
   %.addr1 = alloca i32, align 4
   %.zero.addr = alloca i32, align 4
@@ -2638,6 +2655,7 @@ define weak ptx_kernel void @__omp_offloading_fd02_2044372e_do_not_spmdize_targe
 ; NVPTX-DISABLED2-NEXT:    call void @__omp_outlined__8(ptr [[DOTTHREADID_TEMP_]], ptr [[DOTZERO_ADDR]]) #[[ATTR4]]
 ; NVPTX-DISABLED2-NEXT:    call void @__kmpc_target_deinit()
 ; NVPTX-DISABLED2-NEXT:    br label [[COMMON_RET]]
+;
 entry:
   %.zero.addr = alloca i32, align 4
   %.threadid_temp. = alloca i32, align 4
@@ -2694,6 +2712,7 @@ define internal void @__omp_outlined__8(ptr noalias %.global_tid., ptr noalias %
 ; NVPTX-DISABLED2-NEXT:  entry:
 ; NVPTX-DISABLED2-NEXT:    call void @unknown() #[[ATTR8]]
 ; NVPTX-DISABLED2-NEXT:    ret void
+;
 entry:
   call void @unknown() #11
   ret void
@@ -3015,6 +3034,7 @@ define weak ptx_kernel void @__omp_offloading_fd02_2044372e_do_not_spmdize_task_
 ; NVPTX-DISABLED2-NEXT:    call void @__kmpc_parallel_51(ptr @[[GLOB1]], i32 [[TMP1]], i32 1, i32 -1, i32 -1, ptr @__omp_outlined__9, ptr @__omp_outlined__9_wrapper.ID, ptr [[CAPTURED_VARS_ADDRS]], i64 0)
 ; NVPTX-DISABLED2-NEXT:    call void @__kmpc_target_deinit()
 ; NVPTX-DISABLED2-NEXT:    br label [[COMMON_RET]]
+;
 entry:
   %captured_vars_addrs = alloca [0 x ptr], align 8
   %0 = call i32 @__kmpc_target_init(ptr @__omp_offloading_fd02_2044372e_do_not_spmdize_task_l74_kernel_environment, ptr null)
@@ -3070,6 +3090,7 @@ define internal void @.omp_outlined.(i32 %.global_tid., ptr noalias %.part_id., 
 ; NVPTX-DISABLED2-NEXT:  entry:
 ; NVPTX-DISABLED2-NEXT:    call void @spmd_amenable() #[[ATTR7]]
 ; NVPTX-DISABLED2-NEXT:    ret void
+;
 entry:
   call void @spmd_amenable() #10
   ret void
@@ -3131,6 +3152,7 @@ define weak i32 @__kmpc_target_init(ptr, ptr) {
 ; NVPTX-DISABLED2-LABEL: define {{[^@]+}}@__kmpc_target_init
 ; NVPTX-DISABLED2-SAME: (ptr [[TMP0:%.*]], ptr [[TMP1:%.*]]) {
 ; NVPTX-DISABLED2-NEXT:    ret i32 0
+;
   ret i32 0
 }
 
@@ -3255,6 +3277,7 @@ define internal void @__omp_outlined__9_wrapper(i16 zeroext %0, i32 %1) #3 {
 ; NVPTX-DISABLED2-NEXT:    call void @__kmpc_get_shared_variables(ptr [[GLOBAL_ARGS]])
 ; NVPTX-DISABLED2-NEXT:    call void @__omp_outlined__9(ptr [[DOTADDR1]], ptr [[DOTZERO_ADDR]]) #[[ATTR4]]
 ; NVPTX-DISABLED2-NEXT:    ret void
+;
 entry:
   %.addr1 = alloca i32, align 4
   %.zero.addr = alloca i32, align 4
