@@ -1601,6 +1601,8 @@ void DarwinClang::AddLinkRuntimeLibArgs(const ArgList &Args,
     }
     if (Sanitize.needsTysanRt())
       AddLinkSanitizerLibArgs(Args, CmdArgs, "tysan");
+    if (Sanitize.needsObjRt())
+      AddLinkSanitizerLibArgs(Args, CmdArgs, "objsan");
     if (Sanitize.needsFuzzer() && !Args.hasArg(options::OPT_dynamiclib)) {
       AddLinkSanitizerLibArgs(Args, CmdArgs, "fuzzer", /*shared=*/false);
 
@@ -3597,6 +3599,7 @@ SanitizerMask Darwin::getSupportedSanitizers() const {
   Res |= SanitizerKind::Fuzzer;
   Res |= SanitizerKind::FuzzerNoLink;
   Res |= SanitizerKind::ObjCCast;
+  Res |= SanitizerKind::Object;
 
   // Prior to 10.9, macOS shipped a version of the C++ standard library without
   // C++11 support. The same is true of iOS prior to version 5. These OS'es are

@@ -70,6 +70,7 @@
 #include "llvm/Transforms/Instrumentation/InstrProfiling.h"
 #include "llvm/Transforms/Instrumentation/Instrumentor.h"
 #include "llvm/Transforms/Instrumentation/KCFI.h"
+#include "llvm/Transforms/Instrumentation/LightSan.h"
 #include "llvm/Transforms/Instrumentation/LowerAllowCheckPass.h"
 #include "llvm/Transforms/Instrumentation/MemProfiler.h"
 #include "llvm/Transforms/Instrumentation/MemorySanitizer.h"
@@ -739,6 +740,9 @@ static void addSanitizers(const Triple &TargetTriple,
 
     if (LangOpts.Sanitize.has(SanitizerKind::Type))
       MPM.addPass(TypeSanitizerPass());
+
+    if (LangOpts.Sanitize.has(SanitizerKind::Object))
+      MPM.addPass(LightSanPass());
 
     if (LangOpts.Sanitize.has(SanitizerKind::NumericalStability))
       MPM.addPass(NumericalStabilitySanitizerPass());

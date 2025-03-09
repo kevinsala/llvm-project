@@ -12,6 +12,7 @@
 #include "HIPUtility.h"
 #include "SPIRV.h"
 #include "clang/Basic/Cuda.h"
+#include "clang/Basic/Sanitizers.h"
 #include "clang/Basic/TargetID.h"
 #include "clang/Driver/Compilation.h"
 #include "clang/Driver/Driver.h"
@@ -223,7 +224,7 @@ HIPAMDToolChain::HIPAMDToolChain(const Driver &D, const llvm::Triple &Triple,
     return;
   for (auto *A : Args.filtered(options::OPT_fsanitize_EQ)) {
     SanitizerMask K = parseSanitizerValue(A->getValue(), /*AllowGroups=*/false);
-    if (K != SanitizerKind::Address)
+    if (K != SanitizerKind::Address && K != SanitizerKind::Object)
       D.getDiags().Report(clang::diag::warn_drv_unsupported_option_for_target)
           << A->getAsString(Args) << getTriple().str();
   }
