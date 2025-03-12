@@ -64,6 +64,7 @@
 #include "llvm/Transforms/IPO/Inliner.h"
 #include "llvm/Transforms/IPO/InputGen.h"
 #include "llvm/Transforms/IPO/Instrumentor.h"
+#include "llvm/Transforms/IPO/LightSan.h"
 #include "llvm/Transforms/IPO/LowerTypeTests.h"
 #include "llvm/Transforms/IPO/MemProfContextDisambiguation.h"
 #include "llvm/Transforms/IPO/MergeFunctions.h"
@@ -1784,6 +1785,8 @@ ModulePassManager PassBuilder::buildThinLTODefaultPipeline(
     MPM.addPass(LowerTypeTestsPass(nullptr, ImportSummary));
   }
 
+  MPM.addPass(LightSanPass());
+
   if (Level == OptimizationLevel::O0) {
     // Run a second time to clean up any type tests left behind by WPD for use
     // in ICP.
@@ -1827,6 +1830,8 @@ PassBuilder::buildLTODefaultPipeline(OptimizationLevel Level,
   ModulePassManager MPM;
 
   invokeFullLinkTimeOptimizationEarlyEPCallbacks(MPM, Level);
+
+  MPM.addPass(LightSanPass());
 
   // Create a function that performs CFI checks for cross-DSO calls with targets
   // in the current module.
