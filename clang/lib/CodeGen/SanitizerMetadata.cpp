@@ -101,13 +101,13 @@ void SanitizerMetadata::reportGlobal(llvm::GlobalVariable *GV,
     Meta.Memtag = false;
   }
 
-  Meta.IsDynInit =
-      IsDynInit && !Meta.NoAddress &&
-      FsanitizeArgument.has(SanitizerKind::Address | SanitizerKind::Object) &&
-      !CGM.isInNoSanitizeList(SanitizerKind::Address |
-                                  SanitizerKind::KernelAddress |
-                                  SanitizerKind::Object,
-                              GV, Loc, Ty, "init");
+  Meta.IsDynInit = IsDynInit && !Meta.NoAddress &&
+                   FsanitizeArgument.hasOneOf(SanitizerKind::Address |
+                                              SanitizerKind::Object) &&
+                   !CGM.isInNoSanitizeList(SanitizerKind::Address |
+                                               SanitizerKind::KernelAddress |
+                                               SanitizerKind::Object,
+                                           GV, Loc, Ty, "init");
 
   GV->setSanitizerMetadata(Meta);
 
