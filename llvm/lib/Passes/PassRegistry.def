@@ -164,6 +164,7 @@ MODULE_PASS("wholeprogramdevirt", WholeProgramDevirtPass())
 MODULE_PASS("input-gen-instrument-entries", InputGenInstrumentEntriesPass())
 MODULE_PASS("input-gen-instrument-memory", InputGenInstrumentMemoryPass())
 MODULE_PASS("lightsan", LightSanPass(ThinOrFullLTOPhase::None))
+MODULE_PASS("buggify", BuggifyPass())
 #undef MODULE_PASS
 
 #ifndef MODULE_PASS_WITH_PARAMS

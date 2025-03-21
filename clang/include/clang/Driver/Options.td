@@ -4073,6 +4073,10 @@ def fno_finite_loops: Flag<["-"], "fno-finite-loops">, Group<f_Group>,
   HelpText<"Do not assume that any loop is finite.">,
   Visibility<[ClangOption, CC1Option]>;
 
+def fbuggify : Flag<["-"], "fbuggify">, Group<f_Group>,
+  HelpText<"Enable Buggify">,
+  Visibility<[CC1Option]>;
+
 def finstrumentor : Flag<["-"], "finstrumentor">, Group<f_Group>,
   HelpText<"Enable instrumentation using the Instrumentor">,
   Visibility<[CC1Option]>;

@@ -57,6 +57,7 @@
 #include "llvm/TargetParser/SubtargetFeature.h"
 #include "llvm/TargetParser/Triple.h"
 #include "llvm/Transforms/HipStdPar/HipStdPar.h"
+#include "llvm/Transforms/IPO/Buggify.h"
 #include "llvm/Transforms/IPO/EmbedBitcodePass.h"
 #include "llvm/Transforms/IPO/Instrumentor.h"
 #include "llvm/Transforms/IPO/LightSan.h"
@@ -1054,6 +1055,10 @@ void EmitAssemblyHelper::RunOptimizationPipeline(
         }
         FPM.addPass(BoundsCheckingPass(Options));
       });
+
+    if (!IsThinLTOPostLink)
+      if (CodeGenOpts.Buggify)
+        MPM.addPass(BuggifyPass());
 
     if (!IsThinLTOPostLink)
       if (CodeGenOpts.Instrumentor)

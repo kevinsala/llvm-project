@@ -46,6 +46,7 @@
 #include "llvm/Transforms/IPO/Annotation2Metadata.h"
 #include "llvm/Transforms/IPO/ArgumentPromotion.h"
 #include "llvm/Transforms/IPO/Attributor.h"
+#include "llvm/Transforms/IPO/Buggify.h"
 #include "llvm/Transforms/IPO/CalledValuePropagation.h"
 #include "llvm/Transforms/IPO/ConstantMerge.h"
 #include "llvm/Transforms/IPO/CrossDSOCFI.h"
@@ -218,6 +219,10 @@ static cl::opt<bool> EnableLoopFlatten("enable-loop-flatten", cl::init(false),
 static cl::opt<bool>
     EnableInstrumentor("enable-instrumentor", cl::init(false), cl::Hidden,
                        cl::desc("Enable the Instrumentor Pass"));
+
+static cl::opt<bool>
+    EnableBuggify("enable-buggify", cl::init(false), cl::Hidden,
+                       cl::desc("Enable the Buggify Pass"));
 
 // Experimentally allow loop header duplication. This should allow for better
 // optimization at Oz, since loop-idiom recognition can then recognize things
@@ -1654,6 +1659,10 @@ PassBuilder::buildPerModuleDefaultPipeline(OptimizationLevel Level,
       PGOOpt->Action == PGOOptions::SampleUse)
     MPM.addPass(PseudoProbeUpdatePass());
 
+  // Run the Buggify pass to introduce memory errors.
+  if (EnableBuggify)
+    MPM.addPass(BuggifyPass());
+
   // Emit annotation remarks.
   addAnnotationRemarksPass(MPM);
 
@@ -2288,6 +2297,10 @@ PassBuilder::buildO0DefaultPipeline(OptimizationLevel Level,
   MPM.addPass(CoroConditionalWrapper(std::move(CoroPM)));
 
   invokeOptimizerLastEPCallbacks(MPM, Level, Phase);
+
+  // Run the Buggify pass to introduce memory errors.
+  if (EnableBuggify)
+    MPM.addPass(BuggifyPass());
 
   if (isLTOPreLink(Phase))
     addRequiredLTOPreLinkPasses(MPM);
