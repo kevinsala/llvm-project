@@ -11972,7 +11972,9 @@ struct AAPotentialValuesCallSiteReturned : AAPotentialValuesImpl {
           continue;
         }
         V = *CallerV ? *CallerV : V;
-        if (*CallerV && AA::isDynamicallyUnique(A, *this, *V)) {
+        if (!*CallerV && !AA::isDynamicallyUnique(A, *this, *V))
+          return false;
+        if (*CallerV) {
           if (recurseForValue(A, IRPosition::value(*V), S))
             continue;
         }
